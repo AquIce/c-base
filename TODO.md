@@ -14,7 +14,14 @@
 - `cmalloc` (`malloc` with custom alignment using header)
 - `mmap` (UNIX-only)
 
-### Allocator API ❌
+### Allocator API ✅
+
+```
+Allocator:
+ handler: <>
+ vt: { alloc, free, realloc, reset }
+ source: <MemorySource>
+```
 
 ### Arena Allocator ❌
 
