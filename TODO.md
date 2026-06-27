@@ -18,12 +18,12 @@
 
 ```
 Allocator:
- handler: <>
+ handler: <Arena>
  vt: { alloc, free, realloc, reset }
  source: <MemorySource>
 ```
 
-### Arena Allocator ❌
+### Arena Allocator ✅
 
 ### Stack Allocator ❌
 
