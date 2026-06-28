@@ -2,7 +2,7 @@
 
 // --= Local Header =--
 
-internal void arena_init(Arena* arena, u8* buffer, usize capacity, bool owns_buffer);
+internal void arena_init(ArenaCtx* arena, u8* buffer, usize capacity, bool owns_buffer);
 
 internal void* arena_alloc(void* handler, usize size, usize alignment);
 internal void arena_free(void* handler, void* ptr);
@@ -18,7 +18,7 @@ internal const AllocatorVTable arena_vtable = {
 
 // --= Implementation =--
 
-internal void arena_init(Arena* arena, u8* buffer, usize capacity, bool owns_buffer) {
+internal void arena_init(ArenaCtx* arena, u8* buffer, usize capacity, bool owns_buffer) {
 	arena->buffer = buffer;
     arena->capacity = capacity;
     arena->offset = 0;
@@ -29,7 +29,7 @@ internal void* arena_alloc(void* handler, usize size, usize alignment) {
 	assert(alignment > 0);
 	assert((alignment & (alignment - 1)) == 0);
 
-	Arena* arena = (Arena*)handler;
+	ArenaCtx* arena = (ArenaCtx*)handler;
 	uptr current = (uptr)(arena->buffer + arena->offset);
 	uptr aligned = align_up_ptr(current, alignment);
 	usize padding = (usize)(aligned - current);
@@ -61,11 +61,11 @@ internal void* arena_realloc(void* handler, void* ptr, usize old_size, usize new
 }
 
 internal void arena_reset(void* handler) {
-	((Arena*)handler)->offset = 0;
+	((ArenaCtx*)handler)->offset = 0;
 }
 
 Allocator arena_create(const MemorySource* source, usize capacity) {
-	Arena* arena = memory_source_reserve(source, sizeof(Arena), alignof(Arena), 0);
+	ArenaCtx* arena = memory_source_reserve(source, sizeof(ArenaCtx), alignof(ArenaCtx), 0);
 	if(!arena) {
 		return (Allocator){0};
 	}
@@ -85,7 +85,7 @@ Allocator arena_create(const MemorySource* source, usize capacity) {
 }
 
 Allocator arena_create_from_buffer(const MemorySource* source, void *buffer, usize capacity) {
-	Arena* arena = memory_source_reserve(source, sizeof(Arena), alignof(Arena), 0);
+	ArenaCtx* arena = memory_source_reserve(source, sizeof(ArenaCtx), alignof(ArenaCtx), 0);
 	if(!arena) {
 		return (Allocator){0};
 	}
@@ -102,7 +102,7 @@ void arena_destroy(Allocator* allocator) {
 	if(!allocator || !allocator->handler) {
         return;
     }
-    Arena* arena = (Arena*)allocator->handler;
+	ArenaCtx* arena = (ArenaCtx*)allocator->handler;
 
     if(arena->owns_buffer) {
         memory_source_release(allocator->source, arena->buffer, arena->capacity);

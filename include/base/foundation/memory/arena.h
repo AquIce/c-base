@@ -8,12 +8,12 @@
 #include <assert.h>
 #include <stdlib.h>
 
-typedef struct Arena {
+typedef struct {
     u8* buffer;
     usize capacity;
     usize offset;
 	bool owns_buffer;
-} Arena;
+} ArenaCtx;
 
 Allocator arena_create(const MemorySource* source, usize capacity);
 Allocator arena_create_from_buffer(const MemorySource* source, void* buffer, usize capacity);

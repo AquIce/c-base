@@ -5,7 +5,7 @@
 #include <base/foundation/memory/arena.h>
 #include <base/foundation/memory/memory.h>
 
-typedef struct TestStruct {
+typedef struct {
     i32 x;
     i32 y;
     f32 z;

@@ -18,7 +18,7 @@
 
 ```
 Allocator:
- handler: <Arena>
+ handler: <ArenaCtx>
  vt: { alloc, free, realloc, reset }
  source: <MemorySource>
 ```

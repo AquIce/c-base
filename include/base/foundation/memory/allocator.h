@@ -10,7 +10,7 @@
 #define NALLOC(allocator, T, n) \
 	((T*)allocator_alloc((allocator), sizeof(T) * (n), alignof(T)))
 
-typedef struct AllocatorVTable {
+typedef struct {
     void* (*alloc)(
 		void* handler,
 		usize size,
