@@ -33,6 +33,13 @@ typedef intptr_t iptr;
 #define PTR_ALIGNMENT alignof(max_align_t)
 
 #define UNUSED(x) (void)(x)
+#define TODO(msg) \
+    do { \
+        fprintf(stderr, "TODO: %s (%s:%d)\n", (msg), __FILE__, __LINE__); \
+        abort(); \
+    } while (0)
+#define TODO_IMPL() \
+    TODO("%s has not been implemented yet", __func__)
 
 #define KB(x) ((x) * 1024ULL)
 #define MB(x) ((x) * 1024ULL * 1024ULL)
