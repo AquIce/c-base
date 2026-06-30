@@ -1,9 +1,11 @@
 #ifndef __BASE_FOUNDATION_MACROS__
 #define __BASE_FOUNDATION_MACROS__
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 typedef int8_t i8;
 typedef int16_t i16;
@@ -33,11 +35,14 @@ typedef intptr_t iptr;
 #define PTR_ALIGNMENT alignof(max_align_t)
 
 #define UNUSED(x) (void)(x)
-#define TODO(msg) \
-    do { \
-        fprintf(stderr, "TODO: %s (%s:%d)\n", (msg), __FILE__, __LINE__); \
-        abort(); \
+
+#define TODO(fmt, ...)									\
+    do {												\
+        fprintf(stderr, "TODO: " fmt " (%s:%d)\n",		\
+                ##__VA_ARGS__, __FILE__, __LINE__);		\
+        abort();										\
     } while (0)
+
 #define TODO_IMPL() \
     TODO("%s has not been implemented yet", __func__)
 
