@@ -5,8 +5,12 @@
 
 #include <assert.h>
 #include <inttypes.h>
+#include <signal.h>
 #include <stdio.h>
-#include <stddef.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 typedef void (*TestFn)(void);
 typedef void (*SetupFn)(void);
@@ -164,6 +168,19 @@ internal_fn void assert_eq_unsupported(const char* fn, const char* file, int lin
         f64: assert_eq_f64, \
 		default: assert_eq_unsupported \
     )(__func__, __FILE__, __LINE__, #b, #a, (b), (a))
+
+#define ASSERT_DEATH(stmt) \
+    do { \
+        pid_t pid = fork(); \
+        if(pid == 0) { \
+            stmt; \
+            _exit(EXIT_SUCCESS); \
+        } \
+        int status; \
+        waitpid(pid, &status, 0); \
+        ASSERT_TRUE(WIFSIGNALED(status)); \
+        ASSERT_EQ(WTERMSIG(status), SIGABRT); \
+    } while(0)
 
 void run_node(const TestNode* node) {
     if(node->setup) {
