@@ -45,6 +45,3 @@ Runs all example executables from `build/examples/` directly (not via CTest).
 | `rebuild`   | `clean → configure → build` using selected profile                   |
 | `ci`        | Full CI pipeline: `clean → configure(ci) → build → test`             |
 | `show`      | Builds project and runs example executables directly                 |
-
-```
-
