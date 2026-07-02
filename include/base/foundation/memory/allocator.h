@@ -37,9 +37,9 @@ typedef struct Allocator {
 	const MemorySource* source;
 } Allocator;
 
-void* allocator_alloc(Allocator* allocator, usize size, usize alignment);
-void allocator_free(Allocator* allocator, void* ptr);
-void* allocator_realloc(Allocator* allocator, void* ptr, usize old_size, usize new_size);
-void allocator_reset(Allocator* allocator);
+void* allocator_alloc(const Allocator* allocator, usize size, usize alignment);
+void allocator_free(const Allocator* allocator, void* ptr);
+void* allocator_realloc(const Allocator* allocator, void* ptr, usize old_size, usize new_size);
+void allocator_reset(const Allocator* allocator);
 
 #endif // __BASE_FOUNDATION_MEMORY_ALLOCATOR__
