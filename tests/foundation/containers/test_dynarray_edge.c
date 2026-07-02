@@ -1,105 +1,135 @@
-#include <assert.h>
-#include <stdio.h>
+#define TEST_FAIL_FATAL
 
+#include <base/foundation/macros.h>
+#include <base/foundation/core/test.h>
 #include <base/foundation/containers/dynarray.h>
 #include <base/foundation/memory/allocator.h>
-#include <base/foundation/macros.h>
-
-/*
-Capacity / size boundaries
-	size = 0
-	capacity = 0
-	size == capacity
-	resizing to exactly current size
-	resizing to 1 element
-Extreme operations
-	pushing into empty array
-	popping last element
-	inserting at index 0 or size
-	removing first/last element
-Invalid or dangerous states
-	null allocator (if allowed at all)
-	missing copy or move in policy
-	self-copy / self-move (dynarray_copy(&a, &a))
-	double destroy
-	reset after move
-Memory boundary behavior
-	reserve to same capacity (should be no-op)
-	reserve just above capacity (forces realloc)
-	shrink-to-fit to zero or minimal size
-*/
+#include <base/foundation/memory/arena.h>
+#include <base/foundation/memory/memory.h>
 
 // ============================================================
-// UTILITIES
+// FIXTURE
 // ============================================================
 
-internal void* test_alloc(void* ctx, usize size, usize alignment);
-internal void test_free(void* ctx, void* ptr);
-Allocator make_test_allocator(void);
+internal MemorySource mem_source;
+internal Allocator arena;
 
-// ============================================================
-// INVALID CONFIGS
-// ============================================================
-
-internal void test_null_allocator(void);
-internal void test_null_policy_copy_missing(void);
-internal void test_null_policy_move_missing(void);
-
-// ============================================================
-// BOUNDARY CONDITIONS
-// ============================================================
-
-internal void test_zero_capacity(void);
-internal void test_one_element(void);
-internal void test_full_to_empty_cycle(void);
-
-// ============================================================
-// RESIZE EDGE CASES
-// ============================================================
-
-internal void test_resize_to_same_size(void);
-internal void test_resize_to_zero(void);
-internal void test_resize_beyond_capacity(void);
-
-// ============================================================
-// COPY / MOVE EDGE CASES
-// ============================================================
-
-internal void test_copy_into_self(void);
-internal void test_move_into_self(void);
-internal void test_copy_empty(void);
-
-// ============================================================
-// MEMORY SAFETY BEHAVIOR
-// ============================================================
-
-internal void test_double_destroy(void);
-internal void test_reset_after_move(void);
-
-// ============================================================
-// MAIN
-// ============================================================
-
-int main(void) {
-    test_null_allocator();
-    test_null_policy_copy_missing();
-    test_null_policy_move_missing();
-
-    test_zero_capacity();
-    test_one_element();
-    test_full_to_empty_cycle();
-
-    test_resize_to_same_size();
-    test_resize_to_zero();
-    test_resize_beyond_capacity();
-
-    test_copy_into_self();
-    test_move_into_self();
-    test_copy_empty();
-
-    test_double_destroy();
-    test_reset_after_move();
-
-    printf("\n[EDGE TESTS PASSED]\n");
-    return 0;
+internal void setup_arena(void) {
+    mem_source = malloc_memory_source_create();
+    arena = arena_create(&mem_source, KB(4));
 }
+
+internal void teardown_arena(void) {
+    arena_destroy(&arena);
+}
+
+// ============================================================
+// CREATION BOUNDARIES
+// ============================================================
+
+TEST(test_zero_capacity) { }
+TEST(test_one_capacity) { }
+
+// ============================================================
+// RESERVE BOUNDARIES
+// ============================================================
+
+TEST(test_reserve_same_capacity) { }
+TEST(test_reserve_smaller_capacity) { }
+TEST(test_reserve_larger_capacity) { }
+
+// ============================================================
+// RESIZE BOUNDARIES
+// ============================================================
+
+TEST(test_resize_same_size) { }
+TEST(test_resize_zero) { }
+TEST(test_resize_beyond_capacity) { }
+
+// ============================================================
+// PUSH / POP BOUNDARIES
+// ============================================================
+
+TEST(test_push_into_empty) { }
+TEST(test_push_until_growth) { }
+TEST(test_pop_last_element) { }
+TEST(test_full_empty_full_cycle) { }
+
+// ============================================================
+// INSERT / REMOVE BOUNDARIES
+// ============================================================
+
+TEST(test_insert_front) { }
+TEST(test_insert_back) { }
+TEST(test_remove_front) { }
+TEST(test_remove_back) { }
+
+// ============================================================
+// APPEND BOUNDARIES
+// ============================================================
+
+TEST(test_append_zero_elements) { }
+TEST(test_append_exact_capacity) { }
+TEST(test_append_requires_growth) { }
+
+// ============================================================
+// LIFETIME / STATE SAFETY
+// ============================================================
+
+TEST(test_clear_twice) { }
+TEST(test_reset_twice) { }
+TEST(test_double_destroy) { }
+
+// ============================================================
+// ROOT
+// ============================================================
+
+TEST_ROOT(DYNARRAY_EDGES, "DynArray Edge Tests",
+    setup_arena,
+    teardown_arena,
+
+    TEST_GROUP("Creation",
+        TEST_NODE(test_zero_capacity),
+        TEST_NODE(test_one_capacity)
+    ),
+
+    TEST_GROUP("Reserve",
+        TEST_NODE(test_reserve_same_capacity),
+        TEST_NODE(test_reserve_smaller_capacity),
+        TEST_NODE(test_reserve_larger_capacity)
+    ),
+
+    TEST_GROUP("Resize",
+        TEST_NODE(test_resize_same_size),
+        TEST_NODE(test_resize_zero),
+        TEST_NODE(test_resize_beyond_capacity)
+    ),
+
+    TEST_GROUP("Push / Pop",
+        TEST_NODE(test_push_into_empty),
+        TEST_NODE(test_push_until_growth),
+        TEST_NODE(test_pop_last_element),
+        TEST_NODE(test_full_empty_full_cycle)
+    ),
+
+    TEST_GROUP("Insert / Remove",
+        TEST_NODE(test_insert_front),
+        TEST_NODE(test_insert_back),
+        TEST_NODE(test_remove_front),
+        TEST_NODE(test_remove_back)
+    ),
+
+    TEST_GROUP("Append",
+        TEST_NODE(test_append_zero_elements),
+        TEST_NODE(test_append_exact_capacity),
+        TEST_NODE(test_append_requires_growth)
+    ),
+
+    TEST_GROUP("Idempotence & Lifetime",
+        TEST_NODE(test_clear_twice),
+        TEST_NODE(test_reset_twice),
+        TEST_NODE(test_double_destroy)
+    )
+);
+
+TEST_PROGRAM();

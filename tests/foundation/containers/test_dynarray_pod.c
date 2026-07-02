@@ -1,12 +1,31 @@
-#include <assert.h>
-#include <stdio.h>
+#include <base/foundation/core/test.h>
+#include <base/foundation/macros.h>
 
 #include <base/foundation/containers/dynarray.h>
 #include <base/foundation/memory/allocator.h>
-#include <base/foundation/macros.h>
+#include <base/foundation/memory/arena.h>
+#include <base/foundation/memory/memory.h>
+
+#include <stdio.h>
 
 // ============================================================
-// POD TEST TYPES
+// GLOBAL TEST FIXTURE (ROOT-OWNED)
+// ============================================================
+
+internal MemorySource mem_source;
+internal Allocator arena;
+
+internal void setup_arena(void) {
+    mem_source = malloc_memory_source_create();
+    arena = arena_create(&mem_source, 4096);
+}
+
+internal void teardown_arena(void) {
+    arena_destroy(&arena);
+}
+
+// ============================================================
+// POD TYPES
 // ============================================================
 
 typedef struct {
@@ -15,92 +34,426 @@ typedef struct {
 } TestPOD;
 
 // ============================================================
-// UTILITIES
-// ============================================================
-
-internal void* test_alloc(void* ctx, usize size, usize alignment);
-internal void test_free(void* ctx, void* ptr);
-Allocator make_test_allocator(void);
-
-// ============================================================
 // CREATION / DESTRUCTION
 // ============================================================
 
-internal void test_pod_create(void);
-internal void test_pod_destroy(void);
+TEST(test_pod_create) {
+    DynArray arr = dynarray_create(&arena, 4, 1, 1);
+
+    ASSERT_TRUE(arr.buffer != nullptr);
+    ASSERT_EQ(arr.size, 0);
+
+    ASSERT_EQ(arr.descriptor.capacity, 4);
+    ASSERT_EQ(arr.descriptor.elem_size, 1);
+    ASSERT_EQ(arr.descriptor.alignment, 1);
+    ASSERT_EQ_PTR(arr.descriptor.allocator, &arena);
+    ASSERT_EQ_PTR(arr.descriptor.elem_lifetime, nullptr);
+}
+
+TEST(test_pod_create_macro) {
+    DynArray arr = DYNARRAY_CREATE(char, &arena, 4);
+
+    ASSERT_TRUE(arr.buffer != nullptr);
+    ASSERT_EQ(arr.size, 0);
+
+    ASSERT_EQ(arr.descriptor.capacity, 4);
+    ASSERT_EQ(arr.descriptor.elem_size, sizeof(char));
+    ASSERT_EQ(arr.descriptor.alignment, _Alignof(char));
+    ASSERT_EQ_PTR(arr.descriptor.allocator, &arena);
+    ASSERT_EQ_PTR(arr.descriptor.elem_lifetime, nullptr);
+}
+
+TEST(test_pod_destroy) {
+    DynArray arr = dynarray_create(&arena, 4, sizeof(int), _Alignof(int));
+
+    dynarray_destroy(&arr);
+
+    ASSERT_EQ_PTR(arr.buffer, nullptr);
+    ASSERT_EQ(arr.size, 0);
+
+    ASSERT_EQ(arr.descriptor.capacity, 0);
+    ASSERT_EQ(arr.descriptor.elem_size, 0);
+    ASSERT_EQ(arr.descriptor.alignment, 0);
+    ASSERT_EQ_PTR(arr.descriptor.allocator, nullptr);
+    ASSERT_EQ_PTR(arr.descriptor.elem_lifetime, nullptr);
+}
 
 // ============================================================
-// RESERVE / CAPACITY
+// RESERVE
 // ============================================================
 
-internal void test_pod_reserve_growth(void);
-internal void test_pod_reserve_noop(void);
+TEST(test_pod_reserve_growth) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
+
+    void* old = arr.buffer;
+
+    ASSERT_TRUE(dynarray_reserve(&arr, 8));
+
+    ASSERT_TRUE(arr.buffer != nullptr);
+    ASSERT_TRUE(arr.buffer != old);
+
+    ASSERT_EQ(arr.size, 0);
+    ASSERT_TRUE(arr.descriptor.capacity >= 8);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_reserve_noop) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 8);
+
+    void* old = arr.buffer;
+
+    ASSERT_TRUE(dynarray_reserve(&arr, 4));
+
+    ASSERT_EQ_PTR(arr.buffer, old);
+    ASSERT_EQ(arr.size, 0);
+    ASSERT_EQ(arr.descriptor.capacity, 8);
+
+    dynarray_destroy(&arr);
+}
 
 // ============================================================
-// COPY (MEMCPY PATH)
+// RESIZE
 // ============================================================
 
-internal void test_pod_copy(void);
-internal void test_pod_copy_empty(void);
+TEST(test_pod_resize_grow) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 8);
+
+    ASSERT_TRUE(dynarray_resize(&arr, 5));
+
+    ASSERT_EQ(arr.size, 5);
+    ASSERT_EQ(arr.descriptor.capacity, 8);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_resize_past_capacity) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
+
+    ASSERT_TRUE(!dynarray_resize(&arr, 5));
+
+    ASSERT_EQ(arr.size, 0);
+    ASSERT_EQ(arr.descriptor.capacity, 2);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_resize_shrink) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 8);
+
+    DYNARRAY_PUSH(&arr, 1);
+    DYNARRAY_PUSH(&arr, 2);
+    DYNARRAY_PUSH(&arr, 3);
+    DYNARRAY_PUSH(&arr, 4);
+    DYNARRAY_PUSH(&arr, 5);
+
+    usize cap = arr.descriptor.capacity;
+
+    ASSERT_TRUE(dynarray_resize(&arr, 2));
+
+    ASSERT_EQ(arr.size, 2);
+    ASSERT_EQ(arr.descriptor.capacity, cap);
+
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_resize_same_size) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    DYNARRAY_PUSH(&arr, 10);
+    DYNARRAY_PUSH(&arr, 20);
+
+    void* buf = arr.buffer;
+    usize cap = arr.descriptor.capacity;
+
+    ASSERT_TRUE(dynarray_resize(&arr, 2));
+
+    ASSERT_EQ_PTR(arr.buffer, buf);
+    ASSERT_EQ(arr.size, 2);
+    ASSERT_EQ(arr.descriptor.capacity, cap);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_resize_zero) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    DYNARRAY_PUSH(&arr, 1);
+    DYNARRAY_PUSH(&arr, 2);
+    DYNARRAY_PUSH(&arr, 3);
+
+    usize cap = arr.descriptor.capacity;
+
+    ASSERT_TRUE(dynarray_resize(&arr, 0));
+
+    ASSERT_EQ(arr.size, 0);
+    ASSERT_EQ(arr.descriptor.capacity, cap);
+
+    dynarray_destroy(&arr);
+}
 
 // ============================================================
-// ELEMENT ACCESS
+// COPY
 // ============================================================
 
-internal void test_pod_at(void);
-internal void test_pod_front_back(void);
-internal void test_pod_data(void);
+TEST(test_pod_copy) {
+    DynArray src = DYNARRAY_CREATE(int, &arena, 4);
+
+    DYNARRAY_PUSH(&src, 10);
+    DYNARRAY_PUSH(&src, 20);
+    DYNARRAY_PUSH(&src, 30);
+
+    DynArray dst = {0};
+
+    ASSERT_TRUE(dynarray_copy(&dst, &src));
+
+    ASSERT_TRUE(dst.buffer != nullptr);
+    ASSERT_TRUE(dst.buffer != src.buffer);
+
+    ASSERT_EQ(dst.size, src.size);
+
+    ASSERT_EQ(dst.descriptor.capacity, src.descriptor.capacity);
+    ASSERT_EQ(dst.descriptor.elem_size, src.descriptor.elem_size);
+    ASSERT_EQ(dst.descriptor.alignment, src.descriptor.alignment);
+    ASSERT_EQ_PTR(dst.descriptor.allocator, src.descriptor.allocator);
+    ASSERT_EQ_PTR(dst.descriptor.elem_lifetime, src.descriptor.elem_lifetime);
+
+    ASSERT_EQ(*(int*)dynarray_at(&dst, 0), 10);
+    ASSERT_EQ(*(int*)dynarray_at(&dst, 1), 20);
+    ASSERT_EQ(*(int*)dynarray_at(&dst, 2), 30);
+
+    dynarray_destroy(&dst);
+    dynarray_destroy(&src);
+}
+
+TEST(test_pod_copy_empty) {
+    DynArray src = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray dst = {0};
+
+    ASSERT_TRUE(dynarray_copy(&dst, &src));
+
+    ASSERT_TRUE(dst.buffer != src.buffer);
+    ASSERT_EQ(dst.size, 0);
+
+    ASSERT_EQ(dst.descriptor.capacity, src.descriptor.capacity);
+    ASSERT_EQ(dst.descriptor.elem_size, src.descriptor.elem_size);
+    ASSERT_EQ(dst.descriptor.alignment, src.descriptor.alignment);
+    ASSERT_EQ_PTR(dst.descriptor.allocator, src.descriptor.allocator);
+    ASSERT_EQ_PTR(dst.descriptor.elem_lifetime, src.descriptor.elem_lifetime);
+
+    dynarray_destroy(&dst);
+    dynarray_destroy(&src);
+}
+
+// ============================================================
+// ACCESS
+// ============================================================
+
+TEST(test_pod_at) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    DYNARRAY_PUSH(&arr, 1);
+    DYNARRAY_PUSH(&arr, 2);
+    DYNARRAY_PUSH(&arr, 3);
+
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 3);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_front_back) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    DYNARRAY_PUSH(&arr, 5);
+    DYNARRAY_PUSH(&arr, 10);
+    DYNARRAY_PUSH(&arr, 15);
+
+    ASSERT_EQ(*(int*)dynarray_front(&arr), 5);
+    ASSERT_EQ(*(int*)dynarray_back(&arr), 15);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_data) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    DYNARRAY_PUSH(&arr, 42);
+    DYNARRAY_PUSH(&arr, 99);
+
+    int* data = dynarray_data(&arr);
+
+    ASSERT_TRUE(data != nullptr);
+    ASSERT_EQ_PTR(data, arr.buffer);
+
+    ASSERT_EQ(data[0], 42);
+    ASSERT_EQ(data[1], 99);
+
+    dynarray_destroy(&arr);
+}
 
 // ============================================================
 // MODIFIERS
 // ============================================================
 
-internal void test_pod_push(void);
-internal void test_pod_pop(void);
-internal void test_pod_insert(void);
-internal void test_pod_remove(void);
+TEST(test_pod_push) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
 
-internal void test_pod_append(void);
-internal void test_pod_clear(void);
-internal void test_pod_reset(void);
+    int a = 10, b = 20, c = 30;
 
-// ============================================================
-// EDGE CASES
-// ============================================================
+    ASSERT_TRUE(dynarray_push(&arr, &a));
+    ASSERT_TRUE(dynarray_push(&arr, &b));
+    ASSERT_TRUE(dynarray_push(&arr, &c));
 
-internal void test_pod_zero_capacity(void);
-internal void test_pod_large_reserve(void);
+    ASSERT_EQ(dynarray_size(&arr), 3);
 
-// ============================================================
-// MAIN
-// ============================================================
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 10);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 20);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 30);
 
-int main(void) {
-    test_pod_create();
-    test_pod_destroy();
-
-    test_pod_reserve_growth();
-    test_pod_reserve_noop();
-
-    test_pod_copy();
-    test_pod_copy_empty();
-
-    test_pod_at();
-    test_pod_front_back();
-    test_pod_data();
-
-    test_pod_push();
-    test_pod_pop();
-    test_pod_insert();
-    test_pod_remove();
-
-    test_pod_append();
-    test_pod_clear();
-    test_pod_reset();
-
-    test_pod_zero_capacity();
-    test_pod_large_reserve();
-
-    printf("\n[POD TESTS PASSED]\n");
-    return 0;
+    dynarray_destroy(&arr);
 }
+
+TEST(test_pod_pop) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    int a = 1, b = 2, c = 3;
+
+    dynarray_push(&arr, &a);
+    dynarray_push(&arr, &b);
+    dynarray_push(&arr, &c);
+
+    dynarray_pop(&arr);
+
+    ASSERT_EQ(dynarray_size(&arr), 2);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_insert) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
+
+    int a = 1, b = 3, mid = 2;
+
+    dynarray_push(&arr, &a);
+    dynarray_push(&arr, &b);
+
+    dynarray_insert(&arr, 1, &mid);
+
+    ASSERT_EQ(dynarray_size(&arr), 3);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 3);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_remove) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    int v[] = {1, 2, 3, 4};
+
+    for (int i = 0; i < 4; i++) {
+        dynarray_push(&arr, &v[i]);
+    }
+
+    dynarray_remove(&arr, 1);
+
+    ASSERT_EQ(dynarray_size(&arr), 3);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 3);
+    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 4);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_append) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    int a[] = {1, 2, 3};
+    int b[] = {4, 5};
+
+    dynarray_append(&arr, a, 3);
+    dynarray_append(&arr, b, 2);
+
+    ASSERT_EQ(dynarray_size(&arr), 5);
+
+    for (int i = 0; i < 5; i++) {
+        ASSERT_EQ(*(int*)dynarray_at(&arr, i), i + 1);
+    }
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_clear) {
+    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+
+    int v[] = {10, 20, 30};
+
+    for (int i = 0; i < 3; i++) {
+        dynarray_push(&arr, &v[i]);
+    }
+
+    dynarray_clear(&arr);
+
+    ASSERT_EQ(dynarray_size(&arr), 0);
+    ASSERT_EQ(dynarray_capacity(&arr), 4);
+
+    dynarray_destroy(&arr);
+}
+
+// ============================================================
+// ROOT
+// ============================================================
+
+TEST_ROOT(DYNARRAY_POD, "DynArray POD Tests",
+    setup_arena,
+    teardown_arena,
+
+    TEST_GROUP("Creation",
+        TEST_NODE(test_pod_create),
+        TEST_NODE(test_pod_create_macro),
+        TEST_NODE(test_pod_destroy)
+    ),
+
+    TEST_GROUP("Reserve",
+        TEST_NODE(test_pod_reserve_growth),
+        TEST_NODE(test_pod_reserve_noop)
+    ),
+
+    TEST_GROUP("Resize",
+        TEST_NODE(test_pod_resize_grow),
+        TEST_NODE(test_pod_resize_past_capacity),
+        TEST_NODE(test_pod_resize_shrink),
+        TEST_NODE(test_pod_resize_same_size),
+        TEST_NODE(test_pod_resize_zero)
+    ),
+
+    TEST_GROUP("Copy",
+        TEST_NODE(test_pod_copy),
+        TEST_NODE(test_pod_copy_empty)
+    ),
+
+    TEST_GROUP("Access",
+        TEST_NODE(test_pod_at),
+        TEST_NODE(test_pod_front_back),
+        TEST_NODE(test_pod_data)
+    ),
+
+    TEST_GROUP("Modifiers",
+        TEST_NODE(test_pod_push),
+        TEST_NODE(test_pod_pop),
+        TEST_NODE(test_pod_insert),
+        TEST_NODE(test_pod_remove),
+        TEST_NODE(test_pod_append),
+        TEST_NODE(test_pod_clear)
+    )
+)
+
+TEST_PROGRAM();

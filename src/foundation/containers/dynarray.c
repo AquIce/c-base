@@ -5,6 +5,16 @@
 #include <base/foundation/memory/allocator.h>
 
 #include <assert.h>
+#include <string.h>
+
+// TODO: Add local pointers lifetime and policy instead of getting the pointers everytime
+
+// --= Local Header =--
+
+internal bool dynarray_ensure_capacity(DynArray*, usize capacity);
+internal bool dynarray_push_unchecked(DynArray*, const void* elem);
+internal void dynarray_reset_state(DynArray* dynarray);
+internal void dynarray_reset_destructive(DynArray* dynarray);
 
 // --= Element Lifetime =--
 
@@ -103,14 +113,11 @@ DynArray dynarray_create_complex(
 
 
 void dynarray_destroy(DynArray* dynarray) {
-	allocator_free(dynarray->descriptor.allocator, dynarray->buffer);
-	dynarray->buffer = nullptr;
-	dynarray->size = 0;
-	dynarray->descriptor.capacity = 0;
-	dynarray->descriptor.elem_size = 0;
-	dynarray->descriptor.alignment = 0;
-	dynarray->descriptor.allocator = nullptr;
-	dynarray->descriptor.elem_lifetime = nullptr;
+    if (dynarray->buffer) {
+        dynarray_clear(dynarray);
+        allocator_free(dynarray->descriptor.allocator, dynarray->buffer);
+    }
+    dynarray_reset_destructive(dynarray);
 }
 
 
@@ -147,7 +154,7 @@ bool dynarray_copy_walloc(
 		return false;
 	}	
 	if(src->descriptor.elem_lifetime == POD_LIFETIME) {
-		memcpy(
+		(void)memcpy(
 			buffer,
 			src->buffer,
 			src->size * src->descriptor.elem_size
@@ -174,23 +181,26 @@ void dynarray_move(
 	DynArray* dest,
 	DynArray* src
 ) {
+	// TODO: Fix this shit
 	dynarray_destroy(dest);
 	*dest = *src;
-	dynarray_reset(src);
+	src->buffer = nullptr;
+    src->size = 0;
+	// dynarray_reset_state(src);
 }
 
 
 // --= Size =--
 
-usize dynarray_size(const DynArray* dynarray) {
-	return dynarray->size;
-}
-usize dynarray_capacity(const DynArray* dynarray) {
-	return dynarray->descriptor.capacity;
-}
+internal bool dynarray_ensure_capacity(DynArray* dynarray, usize capacity) {
+	usize new_capacity = dynarray->descriptor.capacity;
+	while(capacity > new_capacity) {
+		new_capacity = new_capacity == 0
+			? 1
+			: DYNARRAY_GROW_FACTOR * new_capacity;
+	}
 
-bool dynarray_empty(const DynArray* dynarray) {
-	return dynarray->size == 0;
+	return dynarray_reserve(dynarray, new_capacity);
 }
 
 bool dynarray_reserve(DynArray* dynarray, usize capacity) {
@@ -200,7 +210,10 @@ bool dynarray_reserve(DynArray* dynarray, usize capacity) {
 		return true;
 	}
 
-	if(dynarray->descriptor.elem_lifetime && !dynarray->descriptor.elem_lifetime->policy->move) {
+	if(
+		dynarray->descriptor.elem_lifetime &&
+		!(dynarray->descriptor.elem_lifetime->policy->move || dynarray->descriptor.elem_lifetime->policy->copy)
+	) {
 		return false;
 	}
 
@@ -212,16 +225,26 @@ bool dynarray_reserve(DynArray* dynarray, usize capacity) {
 	if(!buffer) {
 		return false;
 	}
+
 	if(!dynarray->descriptor.elem_lifetime) {
-		memcpy(
+		(void)memcpy(
 			buffer,
 			dynarray->buffer,
 			dynarray->size * dynarray->descriptor.elem_size
 		);
-	} else {
+	} else if(dynarray->descriptor.elem_lifetime->policy->move) {
 		for(usize i = 0; i < dynarray->size; i++) {
 			usize offset = i * dynarray->descriptor.elem_size;
 			dynarray->descriptor.elem_lifetime->policy->move(
+				dynarray->descriptor.elem_lifetime->ctx,
+				(char*)buffer + offset,
+				(char*)dynarray->buffer + offset
+			);
+		}
+	} else {
+		for(usize i = 0; i < dynarray->size; i++) {
+			usize offset = i * dynarray->descriptor.elem_size;
+			dynarray->descriptor.elem_lifetime->policy->copy(
 				dynarray->descriptor.elem_lifetime->ctx,
 				(char*)buffer + offset,
 				(char*)dynarray->buffer + offset
@@ -234,7 +257,11 @@ bool dynarray_reserve(DynArray* dynarray, usize capacity) {
 	return true;
 }
 bool dynarray_resize(DynArray* dynarray, usize size) {
-	TODO("Add resize using ctor on elements.");
+	assert(!dynarray->descriptor.elem_lifetime || dynarray->descriptor.elem_lifetime->policy);
+	if(dynarray->descriptor.elem_lifetime) {
+		assert(dynarray->descriptor.elem_lifetime->policy->ctor && dynarray->descriptor.elem_lifetime->policy->dtor);
+	}
+
 	if(size == dynarray->size) {
 		return true;
 	}
@@ -244,72 +271,303 @@ bool dynarray_resize(DynArray* dynarray, usize size) {
 
 	usize old_size = dynarray->size;
 	dynarray->size = size;
+
+	// Shrink
 	if(size < old_size) {
+		if(!dynarray->descriptor.elem_lifetime) {
+			return true;
+		}
+		for(usize i = size; i < old_size; i++) {
+			usize offset = i * dynarray->descriptor.elem_size;
+			dynarray->descriptor.elem_lifetime->policy->dtor(
+				dynarray->descriptor.elem_lifetime->ctx,
+				(char*)dynarray->buffer + offset
+			);
+		}
 		return true;
 	}
+
+	// Grow
+	if(!dynarray->descriptor.elem_lifetime) {
+		return true;
+	}
+	for(usize i = old_size; i < size; i++) {
+		usize offset = i * dynarray->descriptor.elem_size;
+		dynarray->descriptor.elem_lifetime->policy->ctor(
+			dynarray->descriptor.elem_lifetime->ctx,
+			(char*)dynarray->buffer + offset
+		);
+	}
+	return true;
 }
 bool dynarray_shrink_to_fit(DynArray* dynarray) {
-	TODO_IMPL()
-}
-
-
-// --= Element Access =--
-
-void* dynarray_at(DynArray* dynarray, usize index) {
-	TODO_IMPL()
-}
-const void* dynarray_at_const(const DynArray* dynarray, usize index) {
-	TODO_IMPL()
-}
-
-void* dynarray_front(DynArray* dynarray) {
-	TODO_IMPL()
-}
-void* dynarray_back(DynArray* dynarray) {
-	TODO_IMPL()
-}
-
-void* dynarray_data(DynArray* dynarray) {
-	TODO_IMPL()
-}
-const void* dynarray_data_const(const DynArray* dynarray) {
-	TODO_IMPL()
+	TODO_IMPL();
 }
 
 
 // --= Modifiers =--
 
-bool dynarray_push(DynArray* dynarray, const void* elem) {
-	TODO_IMPL()
+internal bool dynarray_push_unchecked(DynArray* dynarray, const void* elem) {
+	void* dest = (char*)dynarray->buffer + dynarray->size * dynarray->descriptor.elem_size;
+
+	// POD
+	if(!dynarray->descriptor.elem_lifetime) {
+		(void)memcpy(dest, elem, dynarray->descriptor.elem_size);
+		dynarray->size++;
+		return true;
+	}
+	// Move
+	if(dynarray->descriptor.elem_lifetime->policy->move) {
+		dynarray->descriptor.elem_lifetime->policy->move(
+			dynarray->descriptor.elem_lifetime->ctx,
+			dest,
+			(void*)elem
+		);
+		dynarray->size++;
+		return true;
+	}
+	// Copy
+	if(dynarray->descriptor.elem_lifetime->policy->copy) {
+		dynarray->descriptor.elem_lifetime->policy->copy(
+			dynarray->descriptor.elem_lifetime->ctx,
+			dest,
+			elem
+		);
+		dynarray->size++;
+		return true;
+	}
+	// Non-POD,non-movable, non-copyable
+    return false;
 }
+
+// WARN: In the case of a movable policy datatype, elem is cast to `void*` and invalidated
+bool dynarray_push(DynArray* dynarray, const void* elem) {
+	assert(!dynarray->descriptor.elem_lifetime || dynarray->descriptor.elem_lifetime->policy);
+
+	if(!dynarray_ensure_capacity(dynarray, dynarray->size + 1)) {
+		return false;
+	}
+
+	return dynarray_push_unchecked(dynarray, elem);
+}
+// WARN: In the case of a movable policy datatype, elem is cast to `void*` and invalidated
 bool dynarray_append(
-	DynArray* dynarray,
-	const void* data,
-	usize size
+    DynArray* dynarray,
+    const void* data,
+    usize count
 ) {
-	TODO_IMPL()
+	assert(!dynarray->descriptor.elem_lifetime || dynarray->descriptor.elem_lifetime->policy);
+
+	if(count == 0) {
+		return true;
+	}
+
+    if(!dynarray_ensure_capacity(dynarray, dynarray->size + count)) {
+		return false;
+	}
+
+	if(!dynarray->descriptor.elem_lifetime) {
+		(void)memcpy(
+			(char*)dynarray->buffer + dynarray->size * dynarray->descriptor.elem_size,
+			data,
+			count * dynarray->descriptor.elem_size
+		);
+
+		dynarray->size += count;
+		return true;
+	}
+
+	for(usize i = 0; i < count; i++) {
+		void* src_elem = (char*)data + i * dynarray->descriptor.elem_size;
+		if(!dynarray_push_unchecked(dynarray, src_elem)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void dynarray_pop(DynArray* dynarray) {
-	TODO_IMPL()
+	assert(!dynarray->descriptor.elem_lifetime || dynarray->descriptor.elem_lifetime->policy);
+	if(dynarray->descriptor.elem_lifetime) {
+		assert(dynarray->descriptor.elem_lifetime->policy->dtor);
+	}
+
+	if(dynarray->size == 0) { return; }
+
+	if(dynarray->descriptor.elem_lifetime) {
+		dynarray->descriptor.elem_lifetime->policy->dtor(
+			dynarray->descriptor.elem_lifetime->ctx,
+			(char*)dynarray->buffer + (dynarray->size - 1) * dynarray->descriptor.elem_size
+		);
+	}
+
+	dynarray->size--;
 }
 
+// WARN: In the case of a movable policy datatype, elem is cast to `void*` and invalidated
 bool dynarray_insert(
     DynArray* dynarray,
     usize index,
     const void* elem
 ) {
-	TODO_IMPL()
+	assert(index <= dynarray->size);
+	assert(!dynarray->descriptor.elem_lifetime || dynarray->descriptor.elem_lifetime->policy);
+	if(dynarray->descriptor.elem_lifetime) {
+		assert(dynarray->descriptor.elem_lifetime->policy->dtor);
+	}
+
+	if(!dynarray_ensure_capacity(dynarray, dynarray->size + 1)) {
+		return false;
+	}
+
+	void* elem_addr = (char*)dynarray->buffer + index * dynarray->descriptor.elem_size;
+
+	if(!dynarray->descriptor.elem_lifetime) {
+		(void)memmove(
+			(char*)elem_addr + dynarray->descriptor.elem_size,
+			elem_addr,
+			(dynarray->size - index) * dynarray->descriptor.elem_size
+		);
+		(void)memcpy(elem_addr, elem, dynarray->descriptor.elem_size);
+		dynarray->size++;
+		return true;
+	}
+
+	if(
+		!dynarray->descriptor.elem_lifetime->policy->move
+		&& !dynarray->descriptor.elem_lifetime->policy->copy
+	) {
+		return false;
+	}
+
+	for (usize i = dynarray->size; i > index; --i) {
+		void* dst = (char*)dynarray->buffer + i * dynarray->descriptor.elem_size;
+
+		if(dynarray->descriptor.elem_lifetime->policy->move) {
+			dynarray->descriptor.elem_lifetime->policy->move(
+				dynarray->descriptor.elem_lifetime->ctx,
+				dst,
+				(char*)dst - dynarray->descriptor.elem_size
+			);
+			continue;
+		}
+		dynarray->descriptor.elem_lifetime->policy->copy(
+			dynarray->descriptor.elem_lifetime->ctx,
+			dst,
+			(char*)dst - dynarray->descriptor.elem_size
+		);
+	}
+
+	if(dynarray->descriptor.elem_lifetime->policy->move) {
+		dynarray->descriptor.elem_lifetime->policy->move(
+			dynarray->descriptor.elem_lifetime->ctx,
+			elem_addr,
+			(void*)elem
+		);
+	} else {
+		dynarray->descriptor.elem_lifetime->policy->dtor(
+			dynarray->descriptor.elem_lifetime->ctx,
+			elem_addr
+		);
+		dynarray->descriptor.elem_lifetime->policy->copy(
+			dynarray->descriptor.elem_lifetime->ctx,
+			elem_addr,
+			elem
+		);
+	}
+	
+	dynarray->size++;
+
+	return true;
 }
 
-void dynarray_remove(DynArray* dynarray, usize index) {
-	TODO_IMPL()
+bool dynarray_remove(DynArray* dynarray, usize index) {
+	assert(index < dynarray->size);
+	assert(!dynarray->descriptor.elem_lifetime || dynarray->descriptor.elem_lifetime->policy);
+	if(dynarray->descriptor.elem_lifetime) {
+		assert(dynarray->descriptor.elem_lifetime->policy->dtor);
+	}
+
+	void* elem_addr = (char*)dynarray->buffer + index * dynarray->descriptor.elem_size;
+
+	if(!dynarray->descriptor.elem_lifetime) {
+		(void)memmove(
+			elem_addr,
+			(char*)elem_addr + dynarray->descriptor.elem_size,
+			(dynarray->size - index - 1) * dynarray->descriptor.elem_size
+		);
+		dynarray->size--;
+		return true;
+	}
+
+	if(
+		!dynarray->descriptor.elem_lifetime->policy->move
+		&& !dynarray->descriptor.elem_lifetime->policy->copy
+	) {
+		return false;
+	}
+
+	dynarray->descriptor.elem_lifetime->policy->dtor(
+		dynarray->descriptor.elem_lifetime->ctx,
+		(char*)dynarray->buffer + index * dynarray->descriptor.elem_size
+	);
+
+	for (usize i = index + 1; i < dynarray->size; i++) {
+		void* src = (char*)dynarray->buffer + i * dynarray->descriptor.elem_size;
+
+		if(dynarray->descriptor.elem_lifetime->policy->move) {
+			dynarray->descriptor.elem_lifetime->policy->move(
+				dynarray->descriptor.elem_lifetime->ctx,
+				(char*)src - dynarray->descriptor.elem_size,
+				src
+			);
+			continue;
+		}
+		dynarray->descriptor.elem_lifetime->policy->copy(
+			dynarray->descriptor.elem_lifetime->ctx,
+			(char*)src - dynarray->descriptor.elem_size,
+			src
+		);
+	}
+	if(!dynarray->descriptor.elem_lifetime->policy->move) {
+		dynarray->descriptor.elem_lifetime->policy->dtor(
+			dynarray->descriptor.elem_lifetime->ctx,
+			(char*)dynarray->buffer + (dynarray->size - 1) * dynarray->descriptor.elem_size
+		);
+	}
+
+	dynarray->size--;
+
+	return true;
 }
 
 void dynarray_clear(DynArray* dynarray) {
-	TODO_IMPL()
-}
-void dynarray_reset(DynArray* dynarray) {
-	TODO_IMPL()
+	assert(!dynarray->descriptor.elem_lifetime || dynarray->descriptor.elem_lifetime->policy);
+	if(dynarray->descriptor.elem_lifetime) {
+		assert(dynarray->descriptor.elem_lifetime->policy->dtor);
+	}
+
+	if(dynarray->descriptor.elem_lifetime) {
+		for(usize i = 0; i < dynarray->size; i++) {
+			dynarray->descriptor.elem_lifetime->policy->dtor(
+				dynarray->descriptor.elem_lifetime->ctx,
+				(char*)dynarray->buffer + i * dynarray->descriptor.elem_size
+			);
+		}
+	}
+	dynarray->size = 0;
 }
 
+internal void dynarray_reset_state(DynArray* dynarray) {
+    dynarray->buffer = nullptr;
+    dynarray->size = 0;
+    dynarray->descriptor.capacity = 0;
+    dynarray->descriptor.elem_size = 0;
+    dynarray->descriptor.alignment = 0;
+    dynarray->descriptor.allocator = nullptr;
+    dynarray->descriptor.elem_lifetime = nullptr;
+}
+internal void dynarray_reset_destructive(DynArray* dynarray) {
+    dynarray_clear(dynarray);
+    dynarray_reset_state(dynarray);
+}

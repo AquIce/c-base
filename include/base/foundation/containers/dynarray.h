@@ -9,20 +9,24 @@
 	dynarray_create((allocator), (capacity), sizeof(T), alignof(T))
 
 #define DYNARRAY_CREATE_COMPLEX(T, allocator, capacity, policy) \
-	dynarray_create((allocator), (capacity), sizeof(T), alignof(T), (policy))
+	dynarray_create_complex((allocator), (capacity), sizeof(T), alignof(T), (policy))
 
+#define DYNARRAY_AT(arr, T, i) \
+    ((T*)dynarray_at_const((arr), (i)))
 
-#define DYNARRAY_PUSH(dynarray, value) \
-	do { \
+#define DYNARRAY_PUSH(arr, value) \
+    ({ \
         __auto_type tmp = (value); \
         dynarray_push((arr), &tmp); \
-    } while(0)
+    })
 
-#define DYNARRAY_INSERT(dynarray, value, index) \
-	do { \
+#define DYNARRAY_INSERT(arr, index, value) \
+    ({ \
         __auto_type tmp = (value); \
-		dynarray_insert((arr), &tmp, (index)); \
-    } while(0)
+        dynarray_insert((arr), &tmp, (index)); \
+    })
+
+#define DYNARRAY_GROW_FACTOR 2
 
 typedef struct {
 	usize capacity;
@@ -96,27 +100,49 @@ void dynarray_move(
 
 // --= Size =--
 
-usize dynarray_size(const DynArray*);
-usize dynarray_capacity(const DynArray*);
+internal_fn usize dynarray_size(const DynArray* dynarray) {
+	return dynarray->size;
+}
+internal_fn usize dynarray_capacity(const DynArray* dynarray) {
+	return dynarray->descriptor.capacity;
+}
 
-bool dynarray_empty(const DynArray*);
+internal_fn bool dynarray_empty(const DynArray* dynarray) {
+	return dynarray->size == 0;
+}
 
 bool dynarray_reserve(DynArray*, usize capacity);
 bool dynarray_resize(DynArray*, usize size);
 bool dynarray_shrink_to_fit(DynArray*);
 
-
 // --= Element Access =--
 
-void* dynarray_at(DynArray*, usize index);
-const void* dynarray_at_const(const DynArray*, usize index);
+internal_fn void* dynarray_at(DynArray* dynarray, usize index) {
+	assert(0 <= index);
+	assert(index < dynarray->size);
+	return (char*)dynarray->buffer + index * dynarray->descriptor.elem_size;
+}
+internal_fn const void* dynarray_at_const(const DynArray* dynarray, usize index) {
+	assert(0 <= index);
+    assert(index < dynarray->size);
+    return (const char*)dynarray->buffer + index * dynarray->descriptor.elem_size;
+}
 
-void* dynarray_front(DynArray*);
-void* dynarray_back(DynArray*);
+internal_fn void* dynarray_front(DynArray* dynarray) {
+	assert(dynarray->size > 0);
+	return dynarray->buffer;
+}
+internal_fn void* dynarray_back(DynArray* dynarray) {
+	assert(dynarray->size > 0);
+	return (char*)dynarray->buffer + (dynarray->size - 1) * dynarray->descriptor.elem_size;
+}
 
-void* dynarray_data(DynArray*);
-const void* dynarray_data_const(const DynArray*);
-
+internal_fn void* dynarray_data(DynArray* dynarray) {
+	return dynarray->buffer;
+}
+internal_fn const void* dynarray_data_const(const DynArray* dynarray) {
+	return dynarray->buffer;
+}
 
 // --= Modifiers =--
 
@@ -135,10 +161,9 @@ bool dynarray_insert(
     const void* elem
 );
 
-void dynarray_remove(DynArray*, usize index);
+bool dynarray_remove(DynArray*, usize index);
 
 void dynarray_clear(DynArray*);
-void dynarray_reset(DynArray*);
 
 
 #endif // __BASE_FOUNDATION_CONTAINERS_DYNARRAY__
