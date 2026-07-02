@@ -94,9 +94,12 @@ DynArray dynarray_create_complex(
 	usize alignment,
 	const ElementLifetime* elem_lifetime
 ) {
-	void* buffer = allocator_alloc(allocator, elem_size * capacity, alignment);
-	if(!buffer) {
-		return (DynArray){0};
+	void* buffer = nullptr;
+	if(capacity != 0) {
+		buffer = allocator_alloc(allocator, elem_size * capacity, alignment);
+		if(!buffer) {
+			return (DynArray){0};
+		}
 	}
 	return (DynArray){
 		.buffer = buffer,
@@ -113,11 +116,11 @@ DynArray dynarray_create_complex(
 
 
 void dynarray_destroy(DynArray* dynarray) {
-    if (dynarray->buffer) {
+    if(dynarray->buffer) {
         dynarray_clear(dynarray);
         allocator_free(dynarray->descriptor.allocator, dynarray->buffer);
     }
-    dynarray_reset_destructive(dynarray);
+    dynarray_reset_state(dynarray);
 }
 
 

@@ -1,5 +1,3 @@
-#define TEST_FAIL_FATAL
-
 #include <base/foundation/macros.h>
 #include <base/foundation/core/test.h>
 #include <base/foundation/containers/dynarray.h>
