@@ -12,6 +12,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define TEST_FAIL_FATAL
+
 typedef void (*TestFn)(void);
 typedef void (*SetupFn)(void);
 typedef void (*TeardownFn)(void);
