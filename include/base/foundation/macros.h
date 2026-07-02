@@ -36,11 +36,13 @@ typedef intptr_t iptr;
 
 #define UNUSED(x) (void)(x)
 
-#define TODO(fmt, ...)									\
-    do {												\
-        fprintf(stderr, "TODO: " fmt " (%s:%d)\n",		\
-                ##__VA_ARGS__, __FILE__, __LINE__);		\
-        abort();										\
+#define LOG(fmt, ...) \
+    fprintf(stderr, "[%s:%d] %s: " fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+
+#define TODO(fmt, ...) \
+    do { \
+        fprintf(stderr, "TODO: " fmt " (%s:%d)\n", ##__VA_ARGS__, __FILE__, __LINE__); \
+        abort(); \
     } while (0)
 
 #define TODO_IMPL() \
