@@ -1,7 +1,6 @@
-#include <assert.h>
-#include <stdio.h>
-
 #include <base/foundation/macros.h>
+#include <base/foundation/core/test.h>
+
 #include <base/foundation/memory/arena.h>
 #include <base/foundation/memory/memory.h>
 
@@ -11,303 +10,255 @@ typedef struct {
     f32 z;
 } TestStruct;
 
-internal void test_create(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// FIXTURE
+// ============================================================
 
-    Allocator arena = arena_create(&source, KB(1));
+internal MemorySource source;
+internal Allocator arena;
 
-    assert(arena.handler != nullptr);
-    assert(arena.vt != nullptr);
-    assert(arena.source == &source);
+internal void setup(void) {
+    source = malloc_memory_source_create();
+    arena = arena_create(&source, KB(1));
+}
+
+internal void teardown(void) {
+    arena_destroy(&arena);
+    malloc_memory_source_destroy(&source);
+}
+
+// ============================================================
+// CREATION
+// ============================================================
+
+TEST(test_create) {
+    ASSERT_NE_PTR(arena.handler, nullptr);
+    ASSERT_NE_PTR(arena.vt, nullptr);
+    ASSERT_EQ_PTR(arena.source, &source);
 
     arena_destroy(&arena);
 
-    assert(arena.handler == nullptr);
-    assert(arena.vt == nullptr);
-    assert(arena.source == nullptr);
+    ASSERT_EQ_PTR(arena.handler, nullptr);
+    ASSERT_EQ_PTR(arena.vt, nullptr);
+    ASSERT_EQ_PTR(arena.source, nullptr);
 
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] create\n");
+    arena = arena_create(&source, KB(1));
 }
 
-internal void test_alloc_single(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// ALLOCATION
+// ============================================================
 
-    Allocator arena = arena_create(&source, KB(1));
-
+TEST(test_alloc_single) {
     i32* value = ALLOC(&arena, i32);
 
-    assert(value != nullptr);
+    ASSERT_NE_PTR(value, nullptr);
 
     *value = 42;
 
-    assert(*value == 42);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] alloc single\n");
+    ASSERT_EQ(*value, 42);
 }
 
-internal void test_alloc_array(void) {
-    MemorySource source = malloc_memory_source_create();
-
-    Allocator arena = arena_create(&source, KB(1));
-
+TEST(test_alloc_array) {
     i32* values = NALLOC(&arena, i32, 128);
 
-    assert(values != nullptr);
+    ASSERT_NE_PTR(values, nullptr);
 
-    for(usize i = 0; i < 128; ++i) {
+    for (usize i = 0; i < 128; ++i)
         values[i] = (i32)i;
-    }
 
-    for(usize i = 0; i < 128; ++i) {
-        assert(values[i] == (i32)i);
-    }
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] alloc array\n");
+    for (usize i = 0; i < 128; ++i)
+        ASSERT_EQ(values[i], (i32)i);
 }
 
-internal void test_multiple_allocs(void) {
-    MemorySource source = malloc_memory_source_create();
-
-    Allocator arena = arena_create(&source, KB(1));
-
+TEST(test_multiple_allocs) {
     TestStruct* a = ALLOC(&arena, TestStruct);
     TestStruct* b = ALLOC(&arena, TestStruct);
     TestStruct* c = ALLOC(&arena, TestStruct);
 
-    assert(a != nullptr);
-    assert(b != nullptr);
-    assert(c != nullptr);
+    ASSERT_NE_PTR(a, nullptr);
+    ASSERT_NE_PTR(b, nullptr);
+    ASSERT_NE_PTR(c, nullptr);
 
-    assert(a != b);
-    assert(b != c);
-    assert(a != c);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] multiple allocs\n");
+    ASSERT_TRUE(a != b);
+    ASSERT_TRUE(a != c);
+    ASSERT_TRUE(b != c);
 }
 
-internal void test_alignment(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// ALIGNMENT
+// ============================================================
 
-    Allocator arena = arena_create(&source, KB(1));
-
+TEST(test_alignment) {
     void* p8  = allocator_alloc(&arena, 16, 8);
     void* p16 = allocator_alloc(&arena, 16, 16);
     void* p32 = allocator_alloc(&arena, 16, 32);
     void* p64 = allocator_alloc(&arena, 16, 64);
 
-    assert(p8  != nullptr);
-    assert(p16 != nullptr);
-    assert(p32 != nullptr);
-    assert(p64 != nullptr);
+    ASSERT_NE_PTR(p8, nullptr);
+    ASSERT_NE_PTR(p16, nullptr);
+    ASSERT_NE_PTR(p32, nullptr);
+    ASSERT_NE_PTR(p64, nullptr);
 
-    assert(((uptr)p8  % 8)  == 0);
-    assert(((uptr)p16 % 16) == 0);
-    assert(((uptr)p32 % 32) == 0);
-    assert(((uptr)p64 % 64) == 0);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] alignment\n");
+    ASSERT_EQ((uptr)p8  % 8, 0);
+    ASSERT_EQ((uptr)p16 % 16, 0);
+    ASSERT_EQ((uptr)p32 % 32, 0);
+    ASSERT_EQ((uptr)p64 % 64, 0);
 }
 
-internal void test_out_of_memory(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// CAPACITY
+// ============================================================
 
-    Allocator arena = arena_create(&source, 128);
+TEST(test_out_of_memory) {
+    Allocator local = arena_create(&source, 128);
 
-    void* first  = allocator_alloc(&arena, 100, 8);
-    void* second = allocator_alloc(&arena, 100, 8);
+    void* first  = allocator_alloc(&local, 100, 8);
+    void* second = allocator_alloc(&local, 100, 8);
 
-    assert(first != nullptr);
-    assert(second == nullptr);
+    ASSERT_NE_PTR(first, nullptr);
+    ASSERT_EQ_PTR(second, nullptr);
 
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] out of memory\n");
+    arena_destroy(&local);
 }
 
-internal void test_exact_capacity(void) {
-    MemorySource source = malloc_memory_source_create();
+TEST(test_exact_capacity) {
+    Allocator local = arena_create(&source, 128);
 
-    Allocator arena = arena_create(&source, 128);
+    ASSERT_NE_PTR(allocator_alloc(&local, 128, 1), nullptr);
+    ASSERT_EQ_PTR(allocator_alloc(&local, 1, 1), nullptr);
 
-    void* first = allocator_alloc(&arena, 128, 1);
-
-    assert(first != nullptr);
-
-    void* second = allocator_alloc(&arena, 1, 1);
-
-    assert(second == nullptr);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] exact capacity\n");
+    arena_destroy(&local);
 }
 
-internal void test_reset(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// RESET
+// ============================================================
 
-    Allocator arena = arena_create(&source, KB(1));
-
+TEST(test_reset) {
+	allocator_reset(&arena);
     void* first = allocator_alloc(&arena, 128, 8);
-
-    assert(first != nullptr);
 
     allocator_reset(&arena);
 
     void* second = allocator_alloc(&arena, 128, 8);
 
-    assert(second != nullptr);
-    assert(first == second);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] reset\n");
+    ASSERT_EQ_PTR(first, second);
 }
 
-internal void test_free_noop(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// API
+// ============================================================
 
-    Allocator arena = arena_create(&source, KB(1));
-
+TEST(test_free_noop) {
     i32* first = ALLOC(&arena, i32);
 
     allocator_free(&arena, first);
 
     i32* second = ALLOC(&arena, i32);
 
-    assert(second != nullptr);
-    assert(second != first);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] free noop\n");
+    ASSERT_NE_PTR(second, nullptr);
+    ASSERT_TRUE(second != first);
 }
 
-internal void test_realloc_stub(void) {
-    MemorySource source = malloc_memory_source_create();
-
-    Allocator arena = arena_create(&source, KB(1));
-
+TEST(test_realloc_stub) {
     i32* value = ALLOC(&arena, i32);
 
-    void* result = allocator_realloc(
-        &arena,
-        value,
-        sizeof(i32),
-        sizeof(i64)
+    ASSERT_EQ_PTR(
+        allocator_realloc(&arena, value, sizeof(i32), sizeof(i64)),
+        nullptr
     );
-
-    assert(result == nullptr);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] realloc stub\n");
 }
 
-internal void test_external_buffer(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// EXTERNAL BUFFER
+// ============================================================
 
+TEST(test_external_buffer) {
     u8 buffer[512];
 
-    Allocator arena = arena_create_from_buffer(
-        &source,
-        buffer,
-        sizeof(buffer)
-    );
+    Allocator local =
+        arena_create_from_buffer(&source, buffer, sizeof(buffer));
 
-    TestStruct* value = ALLOC(&arena, TestStruct);
+    TestStruct* value = ALLOC(&local, TestStruct);
 
-    assert(value != nullptr);
+    ASSERT_NE_PTR(value, nullptr);
 
-    assert((u8*)value >= buffer);
-    assert((u8*)value < buffer + sizeof(buffer));
+    ASSERT_TRUE((u8*)value >= buffer);
+    ASSERT_TRUE((u8*)value < buffer + sizeof(buffer));
 
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] external buffer\n");
+    arena_destroy(&local);
 }
 
-internal void test_external_buffer_reset(void) {
-    MemorySource source = malloc_memory_source_create();
-
+TEST(test_external_buffer_reset) {
     u8 buffer[256];
 
-    Allocator arena = arena_create_from_buffer(
-        &source,
-        buffer,
-        sizeof(buffer)
-    );
+    Allocator local =
+        arena_create_from_buffer(&source, buffer, sizeof(buffer));
 
-    void* first = allocator_alloc(&arena, 64, 8);
+    void* first = allocator_alloc(&local, 64, 8);
 
-    allocator_reset(&arena);
+    allocator_reset(&local);
 
-    void* second = allocator_alloc(&arena, 64, 8);
+    void* second = allocator_alloc(&local, 64, 8);
 
-    assert(first == second);
+    ASSERT_EQ_PTR(first, second);
 
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] external buffer reset\n");
+    arena_destroy(&local);
 }
 
-internal void test_source_association(void) {
-    MemorySource source = malloc_memory_source_create();
+// ============================================================
+// MISC
+// ============================================================
 
-    Allocator arena = arena_create(&source, KB(1));
-
-    assert(arena.source == &source);
-
-    arena_destroy(&arena);
-    malloc_memory_source_destroy(&source);
-
-    printf("[PASS] source association\n");
+TEST(test_source_association) {
+    ASSERT_EQ_PTR(arena.source, &source);
 }
 
-int main(void) {
-    test_create();
+// ============================================================
+// ROOT
+// ============================================================
 
-    test_alloc_single();
-    test_alloc_array();
-    test_multiple_allocs();
+TEST_ROOT(ARENA, "Arena Tests",
+    setup,
+    teardown,
 
-    test_alignment();
+    TEST_GROUP("Creation",
+        TEST_NODE(test_create)
+    ),
 
-    test_out_of_memory();
-    test_exact_capacity();
+    TEST_GROUP("Allocation",
+        TEST_NODE(test_alloc_single),
+        TEST_NODE(test_alloc_array),
+        TEST_NODE(test_multiple_allocs)
+    ),
 
-    test_reset();
+    TEST_GROUP("Alignment",
+        TEST_NODE(test_alignment)
+    ),
 
-    test_free_noop();
-    test_realloc_stub();
+    TEST_GROUP("Capacity",
+        TEST_NODE(test_out_of_memory),
+        TEST_NODE(test_exact_capacity)
+    ),
 
-    test_external_buffer();
-    test_external_buffer_reset();
+    TEST_GROUP("Reset",
+        TEST_NODE(test_reset)
+    ),
 
-    test_source_association();
+    TEST_GROUP("API",
+        TEST_NODE(test_free_noop),
+        TEST_NODE(test_realloc_stub)
+    ),
 
-    printf("\nAll arena tests passed.\n");
+    TEST_GROUP("External Buffer",
+        TEST_NODE(test_external_buffer),
+        TEST_NODE(test_external_buffer_reset)
+    ),
 
-    return 0;
-}
+    TEST_GROUP("Misc",
+        TEST_NODE(test_source_association)
+    )
+);
 
+TEST_PROGRAM();

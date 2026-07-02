@@ -150,6 +150,14 @@ internal_fn void assert_eq_f64(const char* fn, const char* file, int line, const
 		} \
 	} while(0)
 
+#define ASSERT_NE_PTR(a, b) \
+	do { \
+		if((a) == (b)) { \
+			TEST_FAIL(__func__, __FILE__, __LINE__, "expected %s=%p, got %s=%p", #b, (b), #a, (a)); \
+		} \
+	} while(0)
+
+
 internal_fn void assert_eq_unsupported(const char* fn, const char* file, int line, const char* ea, const char* eb, void* a, void* b) {
     (void)a;
     (void)b;
