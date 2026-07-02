@@ -67,6 +67,14 @@ def apply_profile(cmd, profile):
             "-DBASE_ENABLE_SANITIZERS=ON",
         ]
 
+    elif profile == "eg":
+        cmd += [
+            "-DCMAKE_BUILD_TYPE=Debug",
+            "-DBASE_BUILD_TESTS=OFF",
+            "-DBASE_BUILD_EXAMPLES=ON",
+            "-DBASE_ENABLE_SANITIZERS=ON",
+        ]
+
     else:
         raise ValueError(f"Unknown profile: {profile}")
 
@@ -94,8 +102,7 @@ def build():
 def test():
     run([
         "ctest",
-        "--test-dir", BUILD_DIR,
-        "--output-on-failure"
+        "--test-dir", BUILD_DIR
     ])
 
 
@@ -112,6 +119,25 @@ def ci(args):
     build()
     test()
 
+def show(args):
+    clean()
+    args.profile = "eg"
+    configure(args)
+    build()
+
+    for root, _, files in os.walk(os.path.join(BUILD_DIR, 'examples')):
+        for f in files:
+            path = os.path.join(root, f)
+
+            if not os.path.isfile(path):
+                continue
+            if not os.access(path, os.X_OK):
+                continue
+            if f.endswith((".o", ".obj", ".cmake", ".txt")):
+                continue
+
+            print(f"\n[RUN] {path}")
+            subprocess.run([path])
 
 # ----------------------------
 # CLI
@@ -127,7 +153,7 @@ def main():
     p_config.add_argument(
         "--profile",
         default="dev",
-        choices=["dev", "release", "sanitize", "ci"]
+        choices=["dev", "release", "sanitize", "ci", "eg"]
     )
 
     # build
@@ -150,6 +176,9 @@ def main():
     # ci shortcut
     sub.add_parser("ci")
 
+    # show
+    sub.add_parser("show")
+
     args = parser.parse_args()
 
     try:
@@ -170,6 +199,10 @@ def main():
 
         elif args.cmd == "ci":
             ci(args)
+
+        elif args.cmd == "show":
+            show(args)
+
     except Exception as e:
         print(f'Exited because of error: {e}')
 

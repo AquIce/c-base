@@ -50,5 +50,6 @@ if(BASE_BUILD_TESTS)
 endif()
 
 if(BASE_BUILD_EXAMPLES)
+    enable_testing()
     add_subdirectory(examples)
 endif()
