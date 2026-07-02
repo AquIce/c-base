@@ -152,23 +152,26 @@ def main():
 
     args = parser.parse_args()
 
-    if args.cmd == "clean":
-        clean()
+    try:
+        if args.cmd == "clean":
+            clean()
 
-    elif args.cmd == "configure":
-        configure(args)
+        elif args.cmd == "configure":
+            configure(args)
 
-    elif args.cmd == "build":
-        build()
+        elif args.cmd == "build":
+            build()
 
-    elif args.cmd == "test":
-        test()
+        elif args.cmd == "test":
+            test()
 
-    elif args.cmd == "rebuild":
-        rebuild(args)
+        elif args.cmd == "rebuild":
+            rebuild(args)
 
-    elif args.cmd == "ci":
-        ci(args)
+        elif args.cmd == "ci":
+            ci(args)
+    except Exception as e:
+        print(f'Exited because of error: {e}')
 
 
 if __name__ == "__main__":
