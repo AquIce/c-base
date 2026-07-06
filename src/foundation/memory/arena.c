@@ -36,7 +36,7 @@ internal void* arena_alloc(void* handler, usize size, usize alignment) {
 
 	usize required = padding + size;
 
-	if (required > arena->capacity - arena->offset) {
+	if(required > arena->capacity - arena->offset) {
 		return nullptr;
 	}
 

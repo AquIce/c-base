@@ -5,9 +5,6 @@
 #include <base/foundation/memory/memory.h>
 #include <base/foundation/memory/allocator.h>
 
-#include <assert.h>
-#include <stdlib.h>
-
 typedef struct {
     u8* buffer;
     usize capacity;
