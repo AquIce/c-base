@@ -2,7 +2,7 @@
 
 ## Containers
 
-### DynArray
+### DynArray ✅
 
 ## Core
 
@@ -29,7 +29,63 @@ Allocator:
 
 ### Arena Allocator ✅
 
-### Stack Allocator ❌
+### Stack Allocator ✅
+
+A stack allocator is a **Last-In, First-Out (LIFO)** allocator.
+
+Allocations are made sequentially from a contiguous buffer, and only the **most recently allocated block** may be freed or reallocated.
+
+Unlike an arena allocator, a stack allocator supports individual `free()` and `realloc()`, but only on the current top allocation.
+
+---
+
+### Memory Layout
+
+Each allocation consists of four regions:
+
+```text
++-----------+----------------+---------+-----------+
+|  Padding  |  StackHeader   | Padding | User Data |
++-----------+----------------+---------+-----------+
+```
+
+The layout satisfies the following constraints:
+
+1. `StackHeader` is aligned to `alignof(StackHeader)`.
+2. User data is aligned to the requested alignment.
+3. Given only the user pointer, the allocator can recover the corresponding `StackHeader`.
+
+Because the header and user data may have different alignment requirements, they are **not necessarily adjacent in memory**. Padding is inserted before the header so that both alignment constraints are satisfied.
+
+---
+
+### Complexity
+
+| Operation | Complexity |
+|-----------|-----------:|
+| Allocate | O(1) |
+| Free (top only) | O(1) |
+| Reallocate (top only) | O(1) |
+| Reset | O(1) |
+
+---
+
+### Characteristics
+
+> Advantages
+
+- Extremely fast allocations.
+- Constant-time free.
+- Constant-time reallocation of the top allocation.
+- No fragmentation.
+- Very small metadata.
+
+> Limitations
+
+- Allocations must be freed in reverse order.
+- Cannot free arbitrary allocations.
+- Cannot reallocate non-top allocations.
+- Capacity is fixed unless backed by a growing memory source.
 
 ### Pool Allocator ❌
 
