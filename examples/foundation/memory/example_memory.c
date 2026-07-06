@@ -3,10 +3,10 @@
 
 #include <stdio.h>
 
-int main(void) {
+i32 main(void) {
 	MemorySource source = cmalloc_memory_source_create();
 
-	int* value = (int*)memory_source_reserve(&source, sizeof(int), alignof(int), 0);
+	i32* value = (i32*)memory_source_reserve(&source, sizeof(i32), alignof(i32), 0);
 	if(!value) {
 		return 1;
 	}
@@ -14,7 +14,7 @@ int main(void) {
 
 	printf("Value: %d\n", *value);
 
-	memory_source_release(&source, value, sizeof(int));
+	memory_source_release(&source, value, sizeof(i32));
 	cmalloc_memory_source_destroy(&source);
 
 	return 0;

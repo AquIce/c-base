@@ -5,13 +5,13 @@
 
 #include <stdio.h>
 
-int main(void) {
+i32 main(void) {
     MemorySource source = malloc_memory_source_create();
     Allocator arena = arena_create(&source, KB(1));
 
-    int* a = ALLOC(&arena, int);
-    int* b = ALLOC(&arena, int);
-    int* c = ALLOC(&arena, int);
+    i32* a = ALLOC(&arena, i32);
+    i32* b = ALLOC(&arena, i32);
+    i32* c = ALLOC(&arena, i32);
 
     *a = 10;
     *b = 20;
@@ -19,20 +19,20 @@ int main(void) {
 
     printf("%d %d %d\n", *a, *b, *c);
 
-    int* arr = NALLOC(&arena, int, 5);
+    i32* arr = NALLOC(&arena, i32, 5);
 
-    for(int i = 0; i < 5; i++) {
+    for(i32 i = 0; i < 5; i++) {
         arr[i] = (i + 1) * 11;
     }
 
-    for(int i = 0; i < 5; i++) {
+    for(i32 i = 0; i < 5; i++) {
         printf("%d ", arr[i]);
     }
     printf("\n");
 
     allocator_reset(&arena);
 
-    int* d = ALLOC(&arena, int);
+    i32* d = ALLOC(&arena, i32);
     *d = 99;
 
     printf("%d\n", *d);

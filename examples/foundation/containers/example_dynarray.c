@@ -7,15 +7,15 @@
 
 void print_dynarray(const DynArray* arr) {
 	for(usize i = 0; i < dynarray_size(arr); i++) {
-        printf("\t[%zu]: %d\n", i, *DYNARRAY_AT(arr, int, i));
+        printf("\t[%zu]: %d\n", i, *DYNARRAY_AT(arr, i32, i));
     }
 }
 
-int main(void) {
+i32 main(void) {
     MemorySource source = malloc_memory_source_create();
     Allocator arena = arena_create(&source, KB(4));
 
-    DynArray numbers = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray numbers = DYNARRAY_CREATE(i32, &arena, 4);
 
     DYNARRAY_PUSH(&numbers, 10);
     DYNARRAY_PUSH(&numbers, 20);
