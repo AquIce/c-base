@@ -29,6 +29,56 @@ Allocator:
 
 ### Arena Allocator ✅
 
+An arena allocator is a **linear bump allocator**.
+
+Allocations are made sequentially from a contiguous memory buffer. Individual deallocation is **not supported**. Memory is only reclaimed by resetting or destroying the entire arena.
+
+---
+
+#### Memory Layout
+
+Each allocation consists of a single region:
+
+```text
++-----------+------------------+
+|  Padding  |   User Data      |
++-----------+------------------+
+```
+
+No per-allocation header is stored, and User Data is aligned to the specified alignment.
+
+The allocator only maintains a single monotonic offset.
+
+---
+
+#### Complexity
+
+| Operation | Complexity |
+|-----------|-----------:|
+| Allocate | O(1) |
+| Free | O(1) (no-op) |
+| Reallocate | O(1) (unsupported) |
+| Reset | O(1) |
+
+---
+
+#### Characteristics
+
+> Advantages
+
+- Extremely fast allocations (single pointer bump)
+- Zero per-allocation metadata
+- Very cache-friendly
+- No fragmentation
+- Simple and predictable behavior
+
+> Limitations
+
+- No individual free
+- No realloc
+- Lifetime tied to entire arena
+- Cannot reclaim memory except via reset or destruction
+
 ### Stack Allocator ✅
 
 A stack allocator is a **Last-In, First-Out (LIFO)** allocator.
@@ -39,7 +89,7 @@ Unlike an arena allocator, a stack allocator supports individual `free()` and `r
 
 ---
 
-### Memory Layout
+#### Memory Layout
 
 Each allocation consists of four regions:
 
@@ -59,7 +109,7 @@ Because the header and user data may have different alignment requirements, they
 
 ---
 
-### Complexity
+#### Complexity
 
 | Operation | Complexity |
 |-----------|-----------:|
@@ -70,7 +120,7 @@ Because the header and user data may have different alignment requirements, they
 
 ---
 
-### Characteristics
+#### Characteristics
 
 > Advantages
 
