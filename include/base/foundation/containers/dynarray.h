@@ -1,7 +1,6 @@
 #ifndef __BASE_FOUNDATION_CONTAINERS_DYNARRAY__
 #define __BASE_FOUNDATION_CONTAINERS_DYNARRAY__
 
-#include "container.h"
 #include <base/foundation/memory/allocator.h>
 #include <base/foundation/containers/container.h>
 
@@ -23,7 +22,7 @@
 #define DYNARRAY_INSERT(arr, index, value) \
     ({ \
         __auto_type tmp = (value); \
-        dynarray_insert((arr), &tmp, (index)); \
+        dynarray_insert((arr), (index), &tmp); \
     })
 
 #define DYNARRAY_GROW_FACTOR 2
