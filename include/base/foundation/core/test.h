@@ -56,9 +56,6 @@ int main(void) { \
 #error "Linker-section TEST_ROOT requires GCC/Clang"
 #endif
 
-#define TEST_GROUP(name, ...) \
-    TEST_GROUP_EX(name, nullptr, nullptr, __VA_ARGS__)
-
 #define TEST_GROUP_EX(name_str, setup_fn, teardown_fn, ...) \
     (TestNode){ \
         .name = name_str, \
@@ -69,13 +66,27 @@ int main(void) { \
         .child_count = sizeof((TestNode[]){ __VA_ARGS__ }) / sizeof(TestNode) \
     }
 
-#define TEST_NODE(fn_name) \
+#define TEST_GROUP(name, ...) \
+    TEST_GROUP_EX(name, nullptr, nullptr, __VA_ARGS__)
+
+#define TEST_NODE_EX(fn_name, setup_fn, teardown_fn) \
     (TestNode){ \
 		.name = #fn_name, \
 		.fn = fn_name, \
+		.setup = setup_fn, \
+		.teardown = teardown_fn, \
 		.children = nullptr, \
 		.child_count = 0 \
 	}
+
+#define TEST_NODE(fn_name) \
+	TEST_NODE_EX(fn_name, nullptr, nullptr)
+
+#define TEST_NODE_SETUP(fn_name, setup_fn) \
+	TEST_NODE_EX(fn_name, setup_fn, nullptr)
+
+#define TEST_NODE_TEARDOWN(fn_name, teardown_fn) \
+	TEST_NODE_EX(fn_name, nullptr, teardown_fn)
 
 internal int tests_run = 0;
 internal int tests_failed = 0;
@@ -117,12 +128,6 @@ DEF_ASSERT_EQ_INT(u16, "%u")
 DEF_ASSERT_EQ_INT(u32, "%u")
 DEF_ASSERT_EQ_INT(u64, "%llu")
 
-DEF_ASSERT_EQ_INT(usize, "%zu")
-DEF_ASSERT_EQ_INT(isize, "%zd")
-
-DEF_ASSERT_EQ_INT(uptr, "%" PRIuPTR)
-DEF_ASSERT_EQ_INT(iptr, "%" PRIdPTR)
-
 internal_fn void assert_eq_f32(const char* fn, const char* file, int line, const char* ea, const char* eb, f32 a, f32 b) {
     f32 diff = a - b;
     if(diff < 0) {
@@ -153,7 +158,7 @@ internal_fn void assert_eq_f64(const char* fn, const char* file, int line, const
 #define ASSERT_NE_PTR(a, b) \
 	do { \
 		if((a) == (b)) { \
-			TEST_FAIL(__func__, __FILE__, __LINE__, "expected %s=%p, got %s=%p", #b, (b), #a, (a)); \
+			TEST_FAIL(__func__, __FILE__, __LINE__, "expected anything but %s=%p, got %s=%p", #b, (b), #a, (a)); \
 		} \
 	} while(0)
 
@@ -186,10 +191,10 @@ internal_fn void assert_eq_unsupported(const char* fn, const char* file, int lin
             stmt; \
             _exit(EXIT_SUCCESS); \
         } \
-        int status; \
-        waitpid(pid, &status, 0); \
-        ASSERT_TRUE(WIFSIGNALED(status)); \
-        ASSERT_EQ(WTERMSIG(status), SIGABRT); \
+        int _status_DEATH; \
+        waitpid(pid, &_status_DEATH, 0); \
+        ASSERT_TRUE(WIFSIGNALED(_status_DEATH)); \
+        ASSERT_EQ(WTERMSIG(_status_DEATH), SIGABRT); \
     } while(0)
 
 void run_node(const TestNode* node) {
@@ -198,10 +203,12 @@ void run_node(const TestNode* node) {
     }
 
     if(node->fn) {
+		if(node->setup) { node->setup(); }
         printf("[RUN ] %s\n", node->name);
         tests_run++;
         node->fn();
         printf("[ OK ] %s\n\n", node->name);
+		if(node->teardown) { node->teardown(); }
     } else {
         printf("=== %s ===\n", node->name);
 
