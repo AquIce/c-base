@@ -87,6 +87,12 @@ internal_fn usize align_up(usize ptr, usize alignment) {
     return (ptr + alignment - 1) & ~(alignment - 1);
 }
 
+internal_fn uptr align_down_ptr(uptr ptr, usize alignment) {
+    return ptr & ~(uptr)(alignment - 1);
+}
 
+internal_fn uptr align_down(usize ptr, usize alignment) {
+    return ptr & ~(alignment - 1);
+}
 
 #endif // __BASE_FOUNDATION_MEMORY__
