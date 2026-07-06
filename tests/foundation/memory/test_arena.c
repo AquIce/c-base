@@ -64,11 +64,11 @@ TEST(test_alloc_array) {
 
     ASSERT_NE_PTR(values, nullptr);
 
-    for (usize i = 0; i < 128; i++) {
+    for(usize i = 0; i < 128; i++) {
         values[i] = (i32)i;
 	}
 
-    for (usize i = 0; i < 128; i++) {
+    for(usize i = 0; i < 128; i++) {
         ASSERT_EQ(values[i], (i32)i);
 	}
 }

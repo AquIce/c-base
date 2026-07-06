@@ -203,7 +203,7 @@ TEST(test_insert_back) {
     dynarray_push(&a, &a1);
     dynarray_insert(&a, 1, &a2);
 
-    ASSERT_EQ(*(i32*)((char*)a.buffer + sizeof(i32)), 2);
+    ASSERT_EQ(*(i32*)((u8*)a.buffer + sizeof(i32)), 2);
 
     dynarray_destroy(&a);
 }

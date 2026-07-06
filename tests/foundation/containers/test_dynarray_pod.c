@@ -51,14 +51,14 @@ TEST(test_pod_create) {
 }
 
 TEST(test_pod_create_macro) {
-    DynArray arr = DYNARRAY_CREATE(char, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(u8, &arena, 4);
 
     ASSERT_TRUE(arr.buffer != nullptr);
     ASSERT_EQ(arr.size, 0);
 
     ASSERT_EQ(arr.descriptor.capacity, 4);
-    ASSERT_EQ(arr.descriptor.elem_size, sizeof(char));
-    ASSERT_EQ(arr.descriptor.alignment, _Alignof(char));
+    ASSERT_EQ(arr.descriptor.elem_size, sizeof(u8));
+    ASSERT_EQ(arr.descriptor.alignment, _Alignof(u8));
     ASSERT_EQ_PTR(arr.descriptor.allocator, &arena);
     ASSERT_EQ_PTR(arr.descriptor.elem_lifetime, nullptr);
 }
@@ -359,7 +359,7 @@ TEST(test_pod_remove) {
 
     i32 v[] = {1, 2, 3, 4};
 
-    for (i32 i = 0; i < 4; i++) {
+    for(i32 i = 0; i < 4; i++) {
         dynarray_push(&arr, &v[i]);
     }
 
@@ -384,7 +384,7 @@ TEST(test_pod_append) {
 
     ASSERT_EQ(dynarray_size(&arr), 5);
 
-    for (i32 i = 0; i < 5; i++) {
+    for(i32 i = 0; i < 5; i++) {
         ASSERT_EQ(*(i32*)dynarray_at(&arr, i), i + 1);
     }
 
@@ -396,7 +396,7 @@ TEST(test_pod_clear) {
 
     i32 v[] = {10, 20, 30};
 
-    for (i32 i = 0; i < 3; i++) {
+    for(i32 i = 0; i < 3; i++) {
         dynarray_push(&arr, &v[i]);
     }
 

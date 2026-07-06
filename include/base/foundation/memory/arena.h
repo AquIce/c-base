@@ -6,7 +6,7 @@
 #include <base/foundation/memory/allocator.h>
 
 typedef struct {
-    u8* buffer;
+    void* buffer;
     usize capacity;
     usize offset;
 	bool owns_buffer;
