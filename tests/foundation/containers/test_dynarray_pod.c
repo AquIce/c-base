@@ -29,8 +29,8 @@ internal void teardown_arena(void) {
 // ============================================================
 
 typedef struct {
-    int x;
-    int y;
+    i32 x;
+    i32 y;
 } TestPOD;
 
 // ============================================================
@@ -64,7 +64,7 @@ TEST(test_pod_create_macro) {
 }
 
 TEST(test_pod_destroy) {
-    DynArray arr = dynarray_create(&arena, 4, sizeof(int), _Alignof(int));
+    DynArray arr = dynarray_create(&arena, 4, sizeof(i32), _Alignof(i32));
 
     dynarray_destroy(&arr);
 
@@ -83,7 +83,7 @@ TEST(test_pod_destroy) {
 // ============================================================
 
 TEST(test_pod_reserve_growth) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 2);
 
     void* old = arr.buffer;
 
@@ -99,7 +99,7 @@ TEST(test_pod_reserve_growth) {
 }
 
 TEST(test_pod_reserve_noop) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 8);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 8);
 
     void* old = arr.buffer;
 
@@ -117,7 +117,7 @@ TEST(test_pod_reserve_noop) {
 // ============================================================
 
 TEST(test_pod_resize_grow) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 8);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 8);
 
     ASSERT_TRUE(dynarray_resize(&arr, 5));
 
@@ -128,7 +128,7 @@ TEST(test_pod_resize_grow) {
 }
 
 TEST(test_pod_resize_past_capacity) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 2);
 
     ASSERT_TRUE(!dynarray_resize(&arr, 5));
 
@@ -139,7 +139,7 @@ TEST(test_pod_resize_past_capacity) {
 }
 
 TEST(test_pod_resize_shrink) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 8);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 8);
 
     DYNARRAY_PUSH(&arr, 1);
     DYNARRAY_PUSH(&arr, 2);
@@ -154,14 +154,14 @@ TEST(test_pod_resize_shrink) {
     ASSERT_EQ(arr.size, 2);
     ASSERT_EQ(arr.descriptor.capacity, cap);
 
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 1), 2);
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_resize_same_size) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
     DYNARRAY_PUSH(&arr, 10);
     DYNARRAY_PUSH(&arr, 20);
@@ -179,7 +179,7 @@ TEST(test_pod_resize_same_size) {
 }
 
 TEST(test_pod_resize_zero) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
     DYNARRAY_PUSH(&arr, 1);
     DYNARRAY_PUSH(&arr, 2);
@@ -200,7 +200,7 @@ TEST(test_pod_resize_zero) {
 // ============================================================
 
 TEST(test_pod_copy) {
-    DynArray src = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray src = DYNARRAY_CREATE(i32, &arena, 4);
 
     DYNARRAY_PUSH(&src, 10);
     DYNARRAY_PUSH(&src, 20);
@@ -221,16 +221,16 @@ TEST(test_pod_copy) {
     ASSERT_EQ_PTR(dst.descriptor.allocator, src.descriptor.allocator);
     ASSERT_EQ_PTR(dst.descriptor.elem_lifetime, src.descriptor.elem_lifetime);
 
-    ASSERT_EQ(*(int*)dynarray_at(&dst, 0), 10);
-    ASSERT_EQ(*(int*)dynarray_at(&dst, 1), 20);
-    ASSERT_EQ(*(int*)dynarray_at(&dst, 2), 30);
+    ASSERT_EQ(*(i32*)dynarray_at(&dst, 0), 10);
+    ASSERT_EQ(*(i32*)dynarray_at(&dst, 1), 20);
+    ASSERT_EQ(*(i32*)dynarray_at(&dst, 2), 30);
 
     dynarray_destroy(&dst);
     dynarray_destroy(&src);
 }
 
 TEST(test_pod_copy_empty) {
-    DynArray src = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray src = DYNARRAY_CREATE(i32, &arena, 4);
     DynArray dst = {0};
 
     ASSERT_TRUE(dynarray_copy(&dst, &src));
@@ -253,39 +253,39 @@ TEST(test_pod_copy_empty) {
 // ============================================================
 
 TEST(test_pod_at) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
     DYNARRAY_PUSH(&arr, 1);
     DYNARRAY_PUSH(&arr, 2);
     DYNARRAY_PUSH(&arr, 3);
 
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 3);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 1), 2);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 2), 3);
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_front_back) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
     DYNARRAY_PUSH(&arr, 5);
     DYNARRAY_PUSH(&arr, 10);
     DYNARRAY_PUSH(&arr, 15);
 
-    ASSERT_EQ(*(int*)dynarray_front(&arr), 5);
-    ASSERT_EQ(*(int*)dynarray_back(&arr), 15);
+    ASSERT_EQ(*(i32*)dynarray_front(&arr), 5);
+    ASSERT_EQ(*(i32*)dynarray_back(&arr), 15);
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_data) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
     DYNARRAY_PUSH(&arr, 42);
     DYNARRAY_PUSH(&arr, 99);
 
-    int* data = dynarray_data(&arr);
+    i32* data = dynarray_data(&arr);
 
     ASSERT_TRUE(data != nullptr);
     ASSERT_EQ_PTR(data, arr.buffer);
@@ -301,9 +301,9 @@ TEST(test_pod_data) {
 // ============================================================
 
 TEST(test_pod_push) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 2);
 
-    int a = 10, b = 20, c = 30;
+    i32 a = 10, b = 20, c = 30;
 
     ASSERT_TRUE(dynarray_push(&arr, &a));
     ASSERT_TRUE(dynarray_push(&arr, &b));
@@ -311,17 +311,17 @@ TEST(test_pod_push) {
 
     ASSERT_EQ(dynarray_size(&arr), 3);
 
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 10);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 20);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 30);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 0), 10);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 1), 20);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 2), 30);
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_pop) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
-    int a = 1, b = 2, c = 3;
+    i32 a = 1, b = 2, c = 3;
 
     dynarray_push(&arr, &a);
     dynarray_push(&arr, &b);
@@ -330,16 +330,16 @@ TEST(test_pod_pop) {
     dynarray_pop(&arr);
 
     ASSERT_EQ(dynarray_size(&arr), 2);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 1), 2);
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_insert) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 2);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 2);
 
-    int a = 1, b = 3, mid = 2;
+    i32 a = 1, b = 3, mid = 2;
 
     dynarray_push(&arr, &a);
     dynarray_push(&arr, &b);
@@ -347,56 +347,56 @@ TEST(test_pod_insert) {
     dynarray_insert(&arr, 1, &mid);
 
     ASSERT_EQ(dynarray_size(&arr), 3);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 2);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 3);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 1), 2);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 2), 3);
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_remove) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
-    int v[] = {1, 2, 3, 4};
+    i32 v[] = {1, 2, 3, 4};
 
-    for (int i = 0; i < 4; i++) {
+    for (i32 i = 0; i < 4; i++) {
         dynarray_push(&arr, &v[i]);
     }
 
     dynarray_remove(&arr, 1);
 
     ASSERT_EQ(dynarray_size(&arr), 3);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 0), 1);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 1), 3);
-    ASSERT_EQ(*(int*)dynarray_at(&arr, 2), 4);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 0), 1);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 1), 3);
+    ASSERT_EQ(*(i32*)dynarray_at(&arr, 2), 4);
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_append) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
-    int a[] = {1, 2, 3};
-    int b[] = {4, 5};
+    i32 a[] = {1, 2, 3};
+    i32 b[] = {4, 5};
 
     dynarray_append(&arr, a, 3);
     dynarray_append(&arr, b, 2);
 
     ASSERT_EQ(dynarray_size(&arr), 5);
 
-    for (int i = 0; i < 5; i++) {
-        ASSERT_EQ(*(int*)dynarray_at(&arr, i), i + 1);
+    for (i32 i = 0; i < 5; i++) {
+        ASSERT_EQ(*(i32*)dynarray_at(&arr, i), i + 1);
     }
 
     dynarray_destroy(&arr);
 }
 
 TEST(test_pod_clear) {
-    DynArray arr = DYNARRAY_CREATE(int, &arena, 4);
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
 
-    int v[] = {10, 20, 30};
+    i32 v[] = {10, 20, 30};
 
-    for (int i = 0; i < 3; i++) {
+    for (i32 i = 0; i < 3; i++) {
         dynarray_push(&arr, &v[i]);
     }
 

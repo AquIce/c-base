@@ -9,7 +9,7 @@
 // ============================================================
 
 typedef struct {
-    int value;
+    i32 value;
 } TestObject;
 
 typedef struct {
@@ -77,7 +77,7 @@ internal void teardown_arena(void) {
 // HELPERS
 // ============================================================
 
-internal TestObject make_object(int value) {
+internal TestObject make_object(i32 value) {
     return (TestObject){ .value = value };
 }
 
@@ -134,7 +134,7 @@ TEST(test_policy_ctor_called) {
 
     ASSERT_EQ(tracker.ctor_calls, 4);
 
-    for(usize i = 0; i < dynarray_size(&array); ++i) {
+    for(usize i = 0; i < dynarray_size(&array); i++) {
         ASSERT_EQ(DYNARRAY_AT(&array, TestObject, i)->value, 0);
     }
 

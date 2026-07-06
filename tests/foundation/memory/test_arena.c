@@ -64,11 +64,13 @@ TEST(test_alloc_array) {
 
     ASSERT_NE_PTR(values, nullptr);
 
-    for (usize i = 0; i < 128; ++i)
+    for (usize i = 0; i < 128; i++) {
         values[i] = (i32)i;
+	}
 
-    for (usize i = 0; i < 128; ++i)
+    for (usize i = 0; i < 128; i++) {
         ASSERT_EQ(values[i], (i32)i);
+	}
 }
 
 TEST(test_multiple_allocs) {
@@ -111,24 +113,24 @@ TEST(test_alignment) {
 // ============================================================
 
 TEST(test_out_of_memory) {
-    Allocator local = arena_create(&source, 128);
+    Allocator local_arena = arena_create(&source, 128);
 
-    void* first  = allocator_alloc(&local, 100, 8);
-    void* second = allocator_alloc(&local, 100, 8);
+    void* first  = allocator_alloc(&local_arena, 100, 8);
+    void* second = allocator_alloc(&local_arena, 100, 8);
 
     ASSERT_NE_PTR(first, nullptr);
     ASSERT_EQ_PTR(second, nullptr);
 
-    arena_destroy(&local);
+    arena_destroy(&local_arena);
 }
 
 TEST(test_exact_capacity) {
-    Allocator local = arena_create(&source, 128);
+    Allocator local_arena = arena_create(&source, 128);
 
-    ASSERT_NE_PTR(allocator_alloc(&local, 128, 1), nullptr);
-    ASSERT_EQ_PTR(allocator_alloc(&local, 1, 1), nullptr);
+    ASSERT_NE_PTR(allocator_alloc(&local_arena, 128, 1), nullptr);
+    ASSERT_EQ_PTR(allocator_alloc(&local_arena, 1, 1), nullptr);
 
-    arena_destroy(&local);
+    arena_destroy(&local_arena);
 }
 
 // ============================================================
@@ -177,34 +179,32 @@ TEST(test_realloc_stub) {
 TEST(test_external_buffer) {
     u8 buffer[512];
 
-    Allocator local =
-        arena_create_from_buffer(&source, buffer, sizeof(buffer));
+    Allocator local_arena = arena_create_from_buffer(&source, buffer, sizeof(buffer));
 
-    TestStruct* value = ALLOC(&local, TestStruct);
+    TestStruct* value = ALLOC(&local_arena, TestStruct);
 
     ASSERT_NE_PTR(value, nullptr);
 
     ASSERT_TRUE((u8*)value >= buffer);
     ASSERT_TRUE((u8*)value < buffer + sizeof(buffer));
 
-    arena_destroy(&local);
+    arena_destroy(&local_arena);
 }
 
 TEST(test_external_buffer_reset) {
     u8 buffer[256];
 
-    Allocator local =
-        arena_create_from_buffer(&source, buffer, sizeof(buffer));
+    Allocator local_arena = arena_create_from_buffer(&source, buffer, sizeof(buffer));
 
-    void* first = allocator_alloc(&local, 64, 8);
+    void* first = allocator_alloc(&local_arena, 64, 8);
 
-    allocator_reset(&local);
+    allocator_reset(&local_arena);
 
-    void* second = allocator_alloc(&local, 64, 8);
+    void* second = allocator_alloc(&local_arena, 64, 8);
 
     ASSERT_EQ_PTR(first, second);
 
-    arena_destroy(&local);
+    arena_destroy(&local_arena);
 }
 
 // ============================================================
