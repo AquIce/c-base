@@ -102,7 +102,8 @@ def build():
 def test():
     run([
         "ctest",
-        "--test-dir", BUILD_DIR
+        "--test-dir", BUILD_DIR,
+        "--output-on-failure"
     ])
 
 
