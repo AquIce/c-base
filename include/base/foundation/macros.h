@@ -34,8 +34,6 @@ typedef intptr_t iptr;
 #define PTR_SIZE sizeof(void*)
 #define MAX_ALIGNMENT alignof(max_align_t)
 
-#define UNUSED(x) (void)(x)
-
 #define LOG(fmt, ...) \
     fprintf(stderr, "[%s:%d] %s: " fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 
@@ -53,5 +51,8 @@ typedef intptr_t iptr;
 #define KB(x) ((x) * 1024ULL)
 #define MB(x) ((x) * 1024ULL * 1024ULL)
 #define GB(x) ((x) * 1024ULL * 1024ULL * 1024ULL)
+
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 #endif // __BASE_FOUNDATION_MACROS__
