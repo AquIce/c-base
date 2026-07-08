@@ -48,15 +48,16 @@ internal void* arena_alloc(void* handler, usize size, usize alignment) {
 }
 
 internal void arena_free(void* handler, void* ptr) {
-	UNUSED(handler);
-	UNUSED(ptr);
+	(void)handler;
+	(void)ptr;
 }
 
 internal void* arena_realloc(void* handler, void* ptr, usize old_size, usize new_size) {
-	UNUSED(handler);
-	UNUSED(ptr);
-	UNUSED(old_size);
-	UNUSED(new_size);
+	(void)handler;
+	(void)ptr;
+	(void)old_size;
+	(void)new_size;
+
 	return nullptr;
 }
 

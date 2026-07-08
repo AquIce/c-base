@@ -7,7 +7,7 @@ typedef struct {
 	usize current_offset;
 } StackHeader;
 
-internal void stack_init(StackCtx* stack, u8* buffer, usize capacity, bool owns_buffer);
+internal void stack_init(StackCtx* stack, void* buffer, usize capacity, bool owns_buffer);
 
 internal void* stack_alloc(void* handler, usize size, usize alignment);
 internal void stack_free(void* handler, void* ptr);
@@ -27,7 +27,7 @@ internal_fn StackHeader* compute_stack_header_ptr(void* ptr) {
 
 // --= Implementation =--
 
-internal void stack_init(StackCtx* stack, u8* buffer, usize capacity, bool owns_buffer) {
+internal void stack_init(StackCtx* stack, void* buffer, usize capacity, bool owns_buffer) {
 	stack->buffer = buffer;
     stack->capacity = capacity;
     stack->offset = 0;
@@ -105,7 +105,7 @@ Allocator stack_create(const MemorySource* source, usize capacity) {
 		return (Allocator){0};
 	}
 
-	u8* buffer = memory_source_reserve(source, capacity, MAX_ALIGNMENT, 0);
+	void* buffer = memory_source_reserve(source, capacity, MAX_ALIGNMENT, 0);
 	if(!buffer) {
 		memory_source_release(source, stack, sizeof(*stack));
 		return (Allocator){0};
