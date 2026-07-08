@@ -70,7 +70,7 @@ Allocator arena_create(const MemorySource* source, usize capacity) {
 		return (Allocator){0};
 	}
 
-	void* buffer = memory_source_reserve(source, capacity, PTR_ALIGNMENT, 0);
+	void* buffer = memory_source_reserve(source, capacity, MAX_ALIGNMENT, 0);
 	if(!buffer) {
 		memory_source_release(source, arena, sizeof(*arena));
 		return (Allocator){0};

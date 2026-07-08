@@ -54,7 +54,7 @@ internal void* malloc_reserve(void* ctx, usize size, usize alignment, MemoryFlag
 	(void)flags;
 	MallocCtx* malloc_ctx = (MallocCtx*)ctx;
 
-	if(alignment <= PTR_ALIGNMENT) {
+	if(alignment <= MAX_ALIGNMENT) {
 		void* ptr = malloc(size);
 		if(!ptr) { return nullptr; }
 
@@ -89,8 +89,8 @@ internal void* cmalloc_reserve(void* ctx, usize size, usize alignment, MemoryFla
 	stattrack_reserve(&cmalloc_ctx->stats, size);
 
 	// Min align
-	if(alignment < PTR_ALIGNMENT) {
-		alignment = PTR_ALIGNMENT;
+	if(alignment < MAX_ALIGNMENT) {
+		alignment = MAX_ALIGNMENT;
 	}
 
 	// Allocate max size

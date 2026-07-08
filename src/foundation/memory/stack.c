@@ -105,7 +105,7 @@ Allocator stack_create(const MemorySource* source, usize capacity) {
 		return (Allocator){0};
 	}
 
-	u8* buffer = memory_source_reserve(source, capacity, PTR_ALIGNMENT, 0);
+	u8* buffer = memory_source_reserve(source, capacity, MAX_ALIGNMENT, 0);
 	if(!buffer) {
 		memory_source_release(source, stack, sizeof(*stack));
 		return (Allocator){0};

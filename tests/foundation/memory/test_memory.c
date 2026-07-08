@@ -65,7 +65,7 @@ TEST(test_mmap_create) {
 TEST(test_malloc_alloc_free) {
     MemorySource source = make_malloc_source();
 
-    void* ptr = memory_source_reserve(&source, 256, PTR_ALIGNMENT, 0);
+    void* ptr = memory_source_reserve(&source, 256, MAX_ALIGNMENT, 0);
 
     ASSERT_NE_PTR(ptr, nullptr);
 
@@ -180,7 +180,7 @@ TEST(test_cmalloc_alignment) {
     void* p64  = memory_source_reserve(&source, 32, 64, 0);
     void* p128 = memory_source_reserve(&source, 32, 128, 0);
 
-    ASSERT_EQ((uptr)p8   % PTR_ALIGNMENT, 0);
+    ASSERT_EQ((uptr)p8   % MAX_ALIGNMENT, 0);
     ASSERT_EQ((uptr)p16  % 16, 0);
     ASSERT_EQ((uptr)p32  % 32, 0);
     ASSERT_EQ((uptr)p64  % 64, 0);
@@ -221,7 +221,7 @@ TEST(test_stats_accumulate) {
 TEST(test_mmap_alloc_free) {
     MemorySource source = make_mmap_source();
 
-    void* ptr = memory_source_reserve(&source, KB(16), PTR_ALIGNMENT, 0);
+    void* ptr = memory_source_reserve(&source, KB(16), MAX_ALIGNMENT, 0);
 
     ASSERT_NE_PTR(ptr, nullptr);
 
@@ -240,7 +240,7 @@ TEST(test_mmap_alloc_free) {
 TEST(test_large_mmap) {
     MemorySource source = make_mmap_source();
 
-    void* ptr = memory_source_reserve(&source, MB(4), PTR_ALIGNMENT, 0);
+    void* ptr = memory_source_reserve(&source, MB(4), MAX_ALIGNMENT, 0);
 
     ASSERT_NE_PTR(ptr, nullptr);
 
