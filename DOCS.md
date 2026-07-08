@@ -137,7 +137,75 @@ Because the header and user data may have different alignment requirements, they
 - Cannot reallocate non-top allocations.
 - Capacity is fixed unless backed by a growing memory source.
 
-### Pool Allocator ❌
+### Pool Allocator ✅
+
+A pool allocator manages a fixed number of **fixed-size memory blocks**.
+
+Memory is divided into equally sized blocks when the pool is created. Free blocks are linked together using an **intrusive free list**.
+
+Unlike an arena allocator, individual blocks may be freed and immediately reused.
+
+---
+
+#### Memory Layout
+
+The pool consists of a contiguous buffer partitioned into equal-sized blocks.
+
+```text
++-------+-------+-------+-------+-------+
+|   A   |   B   |   C   |   D   |   E   |
++-------+-------+-------+-------+-------+
+```
+
+Free blocks store the allocator's linked list:
+
+```text
+free_list
+    |
+    v
++------+    +------+    +------+
+| next | -> | next | -> | NULL |
++------+    +------+    +------+
+```
+
+Allocated blocks contain only user data.
+
+No per-allocation header is stored.
+
+---
+
+#### Complexity
+
+| Operation  |         Complexity |
+| ---------- | -----------------: |
+| Allocate   |               O(1) |
+| Free       |               O(1) |
+| Reallocate | O(1) (unsupported) |
+| Reset      |               O(n) |
+
+Reset rebuilds the free list by relinking every block.
+
+---
+
+#### Characteristics
+
+> Advantages
+
+- Extremely fast constant-time allocation.
+- Extremely fast constant-time deallocation.
+- Zero per-allocation metadata.
+- No external bookkeeping.
+- No fragmentation.
+- Deterministic memory usage.
+- Very cache-friendly.
+
+> Limitations
+
+- All allocations must fit within the fixed block size.
+- Capacity is fixed when the pool is created.
+- Cannot reallocate existing allocations.
+- Reset invalidates every outstanding allocation.
+- Best suited for objects of identical size.
 
 ### Slab Allocator ❌
 
