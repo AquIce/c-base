@@ -41,6 +41,7 @@ def apply_profile(cmd, profile):
             "-DBASE_BUILD_TESTS=ON",
             "-DBASE_BUILD_EXAMPLES=ON",
             "-DBASE_ENABLE_SANITIZERS=ON",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         ]
 
     elif profile == "sanitize":
@@ -49,6 +50,7 @@ def apply_profile(cmd, profile):
             "-DBASE_BUILD_TESTS=ON",
             "-DBASE_BUILD_EXAMPLES=OFF",
             "-DBASE_ENABLE_SANITIZERS=ON",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         ]
 
     elif profile == "release":
@@ -65,6 +67,7 @@ def apply_profile(cmd, profile):
             "-DBASE_BUILD_TESTS=ON",
             "-DBASE_BUILD_EXAMPLES=OFF",
             "-DBASE_ENABLE_SANITIZERS=ON",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         ]
 
     elif profile == "eg":
@@ -73,6 +76,7 @@ def apply_profile(cmd, profile):
             "-DBASE_BUILD_TESTS=OFF",
             "-DBASE_BUILD_EXAMPLES=ON",
             "-DBASE_ENABLE_SANITIZERS=ON",
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
         ]
 
     else:
