@@ -224,6 +224,12 @@ bool dynarray_reserve(DynArray* dynarray, usize capacity) {
 		return false;
 	}
 
+	if(!dynarray->buffer) {
+		dynarray->buffer = buffer;
+		dynarray->descriptor.capacity = capacity;
+		return true;
+	}
+
 	if(!lifetime) {
 		(void)memcpy(
 			buffer,
