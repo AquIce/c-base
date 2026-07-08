@@ -1,12 +1,9 @@
-add_subdirectory(iterators)
-
-file(GLOB CONTAINER_EXAMPLES CONFIGURE_DEPENDS
+file(GLOB ITERATORS_EXAMPLES CONFIGURE_DEPENDS
     "*.c"
 )
 
-foreach(example_file ${CONTAINER_EXAMPLES})
+foreach(example_file ${ITERATORS_EXAMPLES})
 
-    # strip extension → test name
     get_filename_component(example_name ${example_file} NAME_WE)
 
     add_executable(${example_name}
