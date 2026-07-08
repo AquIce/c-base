@@ -32,7 +32,7 @@ typedef intptr_t iptr;
 
 #define nullptr (void*)NULL
 #define PTR_SIZE sizeof(void*)
-#define PTR_ALIGNMENT alignof(max_align_t)
+#define MAX_ALIGNMENT alignof(max_align_t)
 
 #define UNUSED(x) (void)(x)
 
@@ -47,6 +47,8 @@ typedef intptr_t iptr;
 
 #define TODO_IMPL() \
     TODO("%s has not been implemented yet", __func__)
+
+#define comptime_assert _Static_assert
 
 #define KB(x) ((x) * 1024ULL)
 #define MB(x) ((x) * 1024ULL * 1024ULL)
