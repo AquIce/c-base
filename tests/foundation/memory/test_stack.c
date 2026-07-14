@@ -299,41 +299,6 @@ TEST(test_reset) {
 }
 
 // ============================================================
-// EXTERNAL BUFFER
-// ============================================================
-
-TEST(test_external_buffer) {
-    u8 buffer[512];
-
-    Allocator local_stack = stack_create_from_buffer(&source, buffer, sizeof(buffer));
-
-    TestStruct* value = ALLOC(&local_stack, TestStruct);
-
-    ASSERT_NE_PTR(value, nullptr);
-
-    ASSERT_TRUE((u8*)value >= buffer);
-    ASSERT_TRUE((u8*)value < buffer + sizeof(buffer));
-
-    stack_destroy(&local_stack);
-}
-
-TEST(test_external_buffer_reset) {
-    u8 buffer[256];
-
-    Allocator local_stack = stack_create_from_buffer(&source, buffer, sizeof(buffer));
-
-    void* first = allocator_alloc(&local_stack, 64, 8);
-
-    allocator_reset(&local_stack);
-
-    void* second = allocator_alloc(&local_stack, 64, 8);
-
-    ASSERT_EQ_PTR(first, second);
-
-    stack_destroy(&local_stack);
-}
-
-// ============================================================
 // MISC
 // ============================================================
 
@@ -384,11 +349,6 @@ TEST_ROOT(STACK, "Stack Allocator Tests",
 
     TEST_GROUP("Reset",
         TEST_NODE_SETUP(test_reset, node_setup)
-    ),
-
-    TEST_GROUP("External Buffer",
-        TEST_NODE(test_external_buffer),
-        TEST_NODE(test_external_buffer_reset)
     ),
 
     TEST_GROUP("Misc",

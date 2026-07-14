@@ -8,6 +8,21 @@
 
 // --= Local Header =--
 
+typedef struct {
+	void* raw;
+} ManualAlignedMemoryHeader;
+
+struct BufferBlock {
+    usize size;
+    bool free;
+
+    BufferBlock* next;
+    BufferBlock* prev;
+};
+
+
+internal void* buffer_try_fit_pointer_in_block(BufferBlock* block, usize size, usize alignment);
+
 internal void stattrack_reserve(AllocatorStats* stats, usize size);
 internal void stattrack_release(AllocatorStats* stats, usize size);
 
@@ -19,6 +34,9 @@ internal void cmalloc_release(void* ctx, void* ptr, usize size);
 
 internal void* mmap_reserve(void* ctx, usize size, usize alignment, MemoryFlags flags);
 internal void mmap_release(void* ctx, void* ptr, usize size);
+
+internal void* buffer_reserve(void* ctx, usize size, usize alignment, MemoryFlags flags);
+internal void buffer_release(void* ctx, void* ptr, usize size);
 
 internal const MemorySourceVTable malloc_source_vtable = {
 	.reserve = &malloc_reserve,
@@ -35,6 +53,10 @@ internal const MemorySourceVTable mmap_source_vtable = {
 	.release = &mmap_release,
 };
 
+internal const MemorySourceVTable buffer_source_vtable = {
+	.reserve = &buffer_reserve,
+	.release = &buffer_release,
+};
 
 // --= Implementation =--
 
@@ -110,7 +132,6 @@ internal void* cmalloc_reserve(void* ctx, usize size, usize alignment, MemoryFla
 
 	return (void*)aligned;
 }
-
 internal void cmalloc_release(void* ctx, void* ptr, usize size) {
 	if(!ptr) { return; }
 
@@ -146,7 +167,6 @@ internal void* mmap_reserve(void* ctx, usize size, usize alignment, MemoryFlags 
 
 	return ptr;
 }
-
 internal void mmap_release(void* ctx, void* ptr, usize size) {
 	MmapCtx* mmap_ctx = (MmapCtx*)ctx;
 
@@ -156,6 +176,125 @@ internal void mmap_release(void* ctx, void* ptr, usize size) {
 		stattrack_release(&mmap_ctx->stats, size);
 	}
 }
+
+internal void* buffer_try_fit_pointer_in_block(BufferBlock* block, usize size, usize alignment) {
+	if(!block->free) {
+		return nullptr;
+	}
+	if(block->size < size) {
+		return nullptr;
+	} 
+	uptr min_address = (uptr)((u8*)(block + 1) + PTR_SIZE);
+	uptr aligned = align_up_ptr(min_address, alignment);
+	// LOG("size diff: %zu", block->size + (uptr)block - aligned - size);
+	if(aligned + size > (uptr)block + block->size) {
+		return nullptr;
+	}
+	return (void*)aligned;
+}
+
+internal void* buffer_reserve(void* ctx, usize size, usize alignment, MemoryFlags flags) {
+	assert(alignment > 0);
+	assert((alignment & (alignment - 1)) == 0);
+
+	(void)flags;
+	BufferAllocCtx* buffer_ctx = (BufferAllocCtx*)ctx;
+
+	//  +--------------------------+    _____ < size
+	//  v                          |   /     \
+	// +-------------+---------+-------+-----+-----+
+	// | BufferBlock | padding | void* | ptr | ... |
+	// +-------------+---------+-------+-----+-----+
+	//                         aligned ^      ^ next
+	
+	BufferBlock* current_block = buffer_ctx->first;
+	BufferBlock* previous_block = nullptr;
+	void* ptr = nullptr;
+	for(; current_block; current_block = current_block->next) {
+		ptr = buffer_try_fit_pointer_in_block(current_block, size, alignment);
+		if(ptr) { break; }
+		previous_block = current_block;
+	}
+	if(!ptr) {
+		return nullptr;
+	}
+
+	*(BufferBlock**)((u8*)ptr - PTR_SIZE) = current_block;
+
+	current_block->size = size;
+	current_block->free = false;
+	/**current_block = (BufferBlock){
+		.size = size,
+		.free = false,
+		.next = nullptr,
+		.prev = previous_block,
+	};*/
+
+	//							           old_next_start
+	//           size           next_size  |
+	//          /\___________  /\__________v
+	//         /             \/            \
+	//        +----------------------------+-----------------------------------+
+	// BEFORE |       current_block        |                                   |
+	//        +---------------+------------| current_block->next OR BUFFER_END |
+	// AFTER  | current_block | next_block |                                   |
+	//        +---------------+------------+-----------------------------------+
+	//        \__/            \__/         \__/
+	//          \______________/\__________/
+	//		                   \/
+	//	                        sizeof(BufferBlock)
+
+	iptr old_next_start = current_block->next
+		? (iptr)current_block->next
+		: (iptr)buffer_ctx->buffer + buffer_ctx->capacity;
+
+	uptr next_start = (uptr)ptr + size;
+	iptr next_size = old_next_start - next_start - sizeof(BufferBlock);
+	LOG("Add block? %d", next_size >= 0);
+	if(next_size >= 0) {
+		BufferBlock* next_block = (BufferBlock*)(next_start);
+		*next_block = (BufferBlock) {
+			.next = current_block->next,
+			.prev = current_block,
+			.free = true,
+			.size = next_size,
+		};
+		if(current_block->next) {
+			current_block->next->prev = next_block;
+		}
+		current_block->next = next_block;
+	}
+
+	stattrack_reserve(&buffer_ctx->stats, size);
+	return ptr;
+}
+internal void buffer_release(void* ctx, void* ptr, usize size) {
+	if(!ptr) { return; }
+
+	BufferAllocCtx* buffer_ctx = (BufferAllocCtx*)ctx;
+
+	BufferBlock* block = *(BufferBlock**)((u8*)ptr - PTR_SIZE);
+	block->free = true;
+	block->size = (usize)ptr + block->size - (usize)block;
+
+	if(block->prev && block->prev->free) {
+		if(block->next) {
+			block->next->prev = block->prev;
+		}
+		block->prev->next = block->next;
+		block->prev->size += block->size;
+	}
+	if(block->next && block->next->free) {
+		block->next->prev = block->prev;
+		if(block->prev) {
+			block->prev->next = block->next;
+		}
+		block->next->size += block->size;
+	}
+
+	stattrack_release(&buffer_ctx->stats, size);
+}
+
 
 MemorySource malloc_memory_source_create() {
 	MallocCtx* malloc_ctx = malloc(sizeof(MallocCtx));
@@ -212,6 +351,38 @@ MemorySource mmap_memory_source_create() {
 		.vt = &mmap_source_vtable,
 	};
 }
+MemorySource buffer_memory_source_create(void* buffer, usize buffer_size) {
+	assert((uptr)buffer % alignof(BufferBlock) == 0);
+	assert(buffer_size > sizeof(BufferBlock));
+
+	BufferAllocCtx* buffer_ctx = malloc(sizeof(BufferAllocCtx));
+	if(!buffer_ctx) {
+		return (MemorySource){0};
+	}
+
+	*(BufferBlock*)buffer = (BufferBlock){
+		.size = buffer_size - sizeof(BufferBlock),
+		.free = true,
+		.next = nullptr,
+	};
+
+	*buffer_ctx = (BufferAllocCtx){
+		.buffer = buffer,
+		.first = (BufferBlock*)buffer,
+		.capacity = buffer_size,
+		.stats = (AllocatorStats){
+			.allocations = 0,
+			.frees = 0,
+			.bytes_allocated = 0,
+			.bytes_freed = 0,
+		},
+	};
+
+	return (MemorySource){
+		.ctx = buffer_ctx,
+		.vt = &buffer_source_vtable,
+	};
+}
 
 void malloc_memory_source_destroy(MemorySource *malloc_source) {
 	if(!malloc_source) { return; }
@@ -227,6 +398,11 @@ void mmap_memory_source_destroy(MemorySource *mmap_source) {
 	if(!mmap_source) { return; }
 	free(mmap_source->ctx);
 	*mmap_source = (MemorySource){0};
+}
+void buffer_memory_source_destroy(MemorySource *buffer_source) {
+	if(!buffer_source) { return; }
+	free(buffer_source->ctx);
+	*buffer_source = (MemorySource){0};
 }
 
 void* memory_source_reserve(

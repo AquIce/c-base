@@ -18,6 +18,10 @@ internal MemorySource make_mmap_source(void) {
     return mmap_memory_source_create();
 }
 
+internal MemorySource make_buffer_source(void* buffer, usize buffer_size) {
+	return buffer_memory_source_create(buffer, buffer_size);
+}
+
 // ============================================================
 // CREATE / DESTROY
 // ============================================================
@@ -57,6 +61,20 @@ TEST(test_mmap_create) {
     ASSERT_EQ_PTR(source.ctx, nullptr);
     ASSERT_EQ_PTR(source.vt, nullptr);
 }
+
+TEST(test_buffer_create) {
+	u8 buffer[KB(1)];
+    MemorySource source = make_buffer_source(buffer, KB(1));
+
+    ASSERT_NE_PTR(source.ctx, nullptr);
+    ASSERT_NE_PTR(source.vt, nullptr);
+
+    buffer_memory_source_destroy(&source);
+
+    ASSERT_EQ_PTR(source.ctx, nullptr);
+    ASSERT_EQ_PTR(source.vt, nullptr);
+}
+
 
 // ============================================================
 // MALLOC BACKEND
@@ -107,7 +125,7 @@ TEST(test_malloc_alignment) {
     malloc_memory_source_destroy(&source);
 }
 
-TEST(test_multiple_allocations) {
+TEST(test_malloc_multiple_allocations) {
     MemorySource source = make_malloc_source();
 
     void* a = memory_source_reserve(&source, 64, 8, 0);
@@ -250,6 +268,85 @@ TEST(test_large_mmap) {
 }
 
 // ============================================================
+// BUFFER BACKEND
+// ============================================================
+
+TEST(test_buffer_alloc_free) {
+	u8 buffer[KB(1)];
+    MemorySource source = make_buffer_source(buffer, KB(1));
+
+    void* ptr = memory_source_reserve(&source, 256, MAX_ALIGNMENT, 0);
+
+    ASSERT_NE_PTR(ptr, nullptr);
+
+    memory_source_release(&source, ptr, 256);
+
+    BufferAllocCtx* ctx = source.ctx;
+
+    ASSERT_EQ(ctx->stats.allocations, 1);
+    ASSERT_EQ(ctx->stats.frees, 1);
+    ASSERT_EQ(ctx->stats.bytes_allocated, 256);
+    ASSERT_EQ(ctx->stats.bytes_freed, 256);
+
+    buffer_memory_source_destroy(&source);
+}
+
+TEST(test_buffer_alignment) {
+	u8 buffer[KB(1)];
+    MemorySource source = make_buffer_source(buffer, KB(1));
+
+    void* p8  = memory_source_reserve(&source, 32, 8, 0); 
+    void* p16 = memory_source_reserve(&source, 32, 16, 0);
+    void* p32 = memory_source_reserve(&source, 32, 32, 0);
+    void* p64 = memory_source_reserve(&source, 32, 64, 0);
+
+    ASSERT_NE_PTR(p8, nullptr);
+    ASSERT_NE_PTR(p16, nullptr);
+    ASSERT_NE_PTR(p32, nullptr);
+    ASSERT_NE_PTR(p64, nullptr);
+
+    ASSERT_EQ((uptr)p8  % 8, 0);
+    ASSERT_EQ((uptr)p16 % 16, 0);
+    ASSERT_EQ((uptr)p32 % 32, 0);
+    ASSERT_EQ((uptr)p64 % 64, 0);
+
+    memory_source_release(&source, p8, 32);
+    memory_source_release(&source, p16, 32);
+    memory_source_release(&source, p32, 32);
+    memory_source_release(&source, p64, 64);
+
+    buffer_memory_source_destroy(&source);
+}
+
+TEST(test_buffer_multiple_allocations) {
+	u8 buffer[KB(1)];
+    MemorySource source = make_buffer_source(buffer, KB(1));
+
+    void* a = memory_source_reserve(&source, 64, 8, 0);
+    void* b = memory_source_reserve(&source, 64, 8, 0);
+    void* c = memory_source_reserve(&source, 64, 8, 0);
+
+    ASSERT_NE_PTR(a, nullptr);
+    ASSERT_NE_PTR(b, nullptr);
+    ASSERT_NE_PTR(c, nullptr);
+
+    ASSERT_TRUE(a != b);
+    ASSERT_TRUE(a != c);
+    ASSERT_TRUE(b != c);
+
+    memory_source_release(&source, a, 64);
+    memory_source_release(&source, b, 64);
+    memory_source_release(&source, c, 64);
+
+    BufferAllocCtx* ctx = source.ctx;
+
+    ASSERT_EQ(ctx->stats.allocations, 3);
+    ASSERT_EQ(ctx->stats.frees, 3);
+
+    buffer_memory_source_destroy(&source);
+}
+
+// ============================================================
 // ROOT
 // ============================================================
 
@@ -260,13 +357,14 @@ TEST_ROOT(MEMORY_SOURCE, "Memory Source Tests",
     TEST_GROUP("Creation",
         TEST_NODE(test_malloc_create),
         TEST_NODE(test_cmalloc_create),
-        TEST_NODE(test_mmap_create)
+        TEST_NODE(test_mmap_create),
+		TEST_NODE(test_buffer_create)
     ),
 
     TEST_GROUP("Malloc",
         TEST_NODE(test_malloc_alloc_free),
         TEST_NODE(test_malloc_alignment),
-        TEST_NODE(test_multiple_allocations),
+        TEST_NODE(test_malloc_multiple_allocations),
         TEST_NODE(test_null_release)
     ),
 
@@ -279,7 +377,14 @@ TEST_ROOT(MEMORY_SOURCE, "Memory Source Tests",
     TEST_GROUP("Mmap",
         TEST_NODE(test_mmap_alloc_free),
         TEST_NODE(test_large_mmap)
-    )
+    ),
+
+	TEST_GROUP("Malloc",
+        TEST_NODE(test_buffer_alloc_free),
+        TEST_NODE(test_buffer_alignment),
+        TEST_NODE(test_buffer_multiple_allocations)
+    ),
+
 );
 
 TEST_PROGRAM();

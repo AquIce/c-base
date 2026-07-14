@@ -7,7 +7,7 @@ typedef struct {
 	usize current_offset;
 } StackHeader;
 
-internal void stack_init(StackCtx* stack, void* buffer, usize capacity, bool owns_buffer);
+internal void stack_init(StackCtx* stack, void* buffer, usize capacity);
 
 internal void* stack_alloc(void* handler, usize size, usize alignment);
 internal void stack_free(void* handler, void* ptr);
@@ -27,11 +27,10 @@ internal_fn StackHeader* compute_stack_header_ptr(void* ptr) {
 
 // --= Implementation =--
 
-internal void stack_init(StackCtx* stack, void* buffer, usize capacity, bool owns_buffer) {
+internal void stack_init(StackCtx* stack, void* buffer, usize capacity) {
 	stack->buffer = buffer;
     stack->capacity = capacity;
     stack->offset = 0;
-	stack->owns_buffer = owns_buffer;
 }
 
 internal void* stack_alloc(void* handler, usize size, usize alignment) {
@@ -110,21 +109,7 @@ Allocator stack_create(const MemorySource* source, usize capacity) {
 		memory_source_release(source, stack, sizeof(*stack));
 		return (Allocator){0};
 	}
-	stack_init(stack, buffer, capacity, true);
-
-    return (Allocator){
-		.handler = stack,
-		.vt = &stack_vtable,
-		.source = source,
-	};
-}
-
-Allocator stack_create_from_buffer(const MemorySource* source, void *buffer, usize capacity) {
-	StackCtx* stack = memory_source_reserve(source, sizeof(StackCtx), alignof(StackCtx), 0);
-	if(!stack) {
-		return (Allocator){0};
-	}
-	stack_init(stack, buffer, capacity, false);
+	stack_init(stack, buffer, capacity);
 
     return (Allocator){
 		.handler = stack,
@@ -139,10 +124,7 @@ void stack_destroy(Allocator* allocator) {
     }
 	StackCtx* stack = (StackCtx*)allocator->handler;
 
-    if(stack->owns_buffer) {
-        memory_source_release(allocator->source, stack->buffer, stack->capacity);
-    }
-
+	memory_source_release(allocator->source, stack->buffer, stack->capacity);
 	memory_source_release(allocator->source, stack, sizeof(*stack));
 
     allocator->handler = nullptr;

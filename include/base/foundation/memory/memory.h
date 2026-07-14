@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <assert.h>
 
+#define MEMORY_SOURCE_RESERVE_T(T, source) \
+	(T*)memory_source_reserve((source), sizeof(T), alignof(T), 0);
+
 typedef struct {
     usize allocations;
     usize frees;
@@ -54,17 +57,25 @@ typedef struct {
     int flags;
 } MmapCtx;
 
+typedef struct BufferBlock BufferBlock;
+
 typedef struct {
-	void* raw;
-} ManualAlignedMemoryHeader;
+	AllocatorStats stats;
+
+	void* buffer;
+	usize capacity;
+	BufferBlock* first;
+} BufferAllocCtx;
 
 MemorySource malloc_memory_source_create();
 MemorySource cmalloc_memory_source_create();
 MemorySource mmap_memory_source_create();
+MemorySource buffer_memory_source_create(void* buffer, usize buffer_size);
 
 void malloc_memory_source_destroy(MemorySource* malloc_source);
 void cmalloc_memory_source_destroy(MemorySource* cmalloc_source);
 void mmap_memory_source_destroy(MemorySource* mmap_source);
+void buffer_memory_source_destroy(MemorySource* buffer_source);
 
 void* memory_source_reserve(
 	const MemorySource* source,

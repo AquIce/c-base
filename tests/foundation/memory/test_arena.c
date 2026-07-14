@@ -173,41 +173,6 @@ TEST(test_realloc_stub) {
 }
 
 // ============================================================
-// EXTERNAL BUFFER
-// ============================================================
-
-TEST(test_external_buffer) {
-    u8 buffer[512];
-
-    Allocator local_arena = arena_create_from_buffer(&source, buffer, sizeof(buffer));
-
-    TestStruct* value = ALLOC(&local_arena, TestStruct);
-
-    ASSERT_NE_PTR(value, nullptr);
-
-    ASSERT_TRUE((u8*)value >= buffer);
-    ASSERT_TRUE((u8*)value < buffer + sizeof(buffer));
-
-    arena_destroy(&local_arena);
-}
-
-TEST(test_external_buffer_reset) {
-    u8 buffer[256];
-
-    Allocator local_arena = arena_create_from_buffer(&source, buffer, sizeof(buffer));
-
-    void* first = allocator_alloc(&local_arena, 64, 8);
-
-    allocator_reset(&local_arena);
-
-    void* second = allocator_alloc(&local_arena, 64, 8);
-
-    ASSERT_EQ_PTR(first, second);
-
-    arena_destroy(&local_arena);
-}
-
-// ============================================================
 // MISC
 // ============================================================
 
@@ -249,11 +214,6 @@ TEST_ROOT(ARENA, "Arena Tests",
     TEST_GROUP("API",
         TEST_NODE(test_free_noop),
         TEST_NODE(test_realloc_stub)
-    ),
-
-    TEST_GROUP("External Buffer",
-        TEST_NODE(test_external_buffer),
-        TEST_NODE(test_external_buffer_reset)
     ),
 
     TEST_GROUP("Misc",

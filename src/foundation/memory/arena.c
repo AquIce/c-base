@@ -2,7 +2,7 @@
 
 // --= Local Header =--
 
-internal void arena_init(ArenaCtx* arena, void* buffer, usize capacity, bool owns_buffer);
+internal void arena_init(ArenaCtx* arena, void* buffer, usize capacity);
 
 internal void* arena_alloc(void* handler, usize size, usize alignment);
 internal void arena_free(void* handler, void* ptr);
@@ -18,11 +18,10 @@ internal const AllocatorVTable arena_vtable = {
 
 // --= Implementation =--
 
-internal void arena_init(ArenaCtx* arena, void* buffer, usize capacity, bool owns_buffer) {
+internal void arena_init(ArenaCtx* arena, void* buffer, usize capacity) {
 	arena->buffer = buffer;
     arena->capacity = capacity;
     arena->offset = 0;
-	arena->owns_buffer = owns_buffer;
 }
 
 internal void* arena_alloc(void* handler, usize size, usize alignment) {
@@ -76,21 +75,7 @@ Allocator arena_create(const MemorySource* source, usize capacity) {
 		memory_source_release(source, arena, sizeof(*arena));
 		return (Allocator){0};
 	}
-	arena_init(arena, buffer, capacity, true);
-
-    return (Allocator){
-		.handler = arena,
-		.vt = &arena_vtable,
-		.source = source,
-	};
-}
-
-Allocator arena_create_from_buffer(const MemorySource* source, void *buffer, usize capacity) {
-	ArenaCtx* arena = memory_source_reserve(source, sizeof(ArenaCtx), alignof(ArenaCtx), 0);
-	if(!arena) {
-		return (Allocator){0};
-	}
-	arena_init(arena, buffer, capacity, false);
+	arena_init(arena, buffer, capacity);
 
     return (Allocator){
 		.handler = arena,
@@ -105,9 +90,7 @@ void arena_destroy(Allocator* allocator) {
     }
 	ArenaCtx* arena = (ArenaCtx*)allocator->handler;
 
-    if(arena->owns_buffer) {
-        memory_source_release(allocator->source, arena->buffer, arena->capacity);
-    }
+	memory_source_release(allocator->source, arena->buffer, arena->capacity);
 
 	memory_source_release(allocator->source, arena, sizeof(*arena));
 
