@@ -1,18 +1,25 @@
+#include <base/foundation/memory/pool.h>
+
 #include <base/foundation/macros.h>
 #include <base/foundation/memory/allocator.h>
 #include <base/foundation/memory/memory.h>
-#include <base/foundation/memory/pool.h>
 
 #include <assert.h>
 
 // --= Local Header =--
 
-union PoolBlock {
+struct PoolBlock {
     PoolBlock* next;
-	void* data;
 };
 
-internal void pool_init(PoolCtx* pool, void* buffer, usize block_size, usize block_count, usize alignment, bool owns_buffer);
+internal void pool_init(
+	PoolCtx* pool,
+	void* buffer,
+	PoolBlock* meta_buffer,
+	usize block_size,
+	usize block_count,
+	usize alignment
+);
 
 internal void* pool_alloc(void* handler, usize size, usize alignment);
 internal void pool_free(void* handler, void* ptr);
@@ -38,11 +45,11 @@ internal void pool_build_free_list(PoolCtx* pool) {
 	//  ^
 	//  free_list
 
-	PoolBlock* previous = (PoolBlock*)pool->buffer;
-    pool->free_list = (PoolBlock*)pool->buffer;
+	PoolBlock* previous = pool->meta_buffer;
+    pool->free_list = pool->meta_buffer;
 
     for(usize i = 1; i < pool->block_count; i++) {
-        PoolBlock* block = (PoolBlock*)((u8*)pool->buffer + i * pool->block_size);
+        PoolBlock* block = pool->meta_buffer + i;
 
         previous->next = block;
 		previous = block;
@@ -53,19 +60,18 @@ internal void pool_build_free_list(PoolCtx* pool) {
 internal void pool_init(
 	PoolCtx* pool,
 	void* buffer,
+	PoolBlock* meta_buffer,
 	usize block_size,
 	usize block_count,
-	usize alignment,
-	bool owns_buffer
+	usize alignment
 ) {
-
 	assert(block_count != 0);
 
 	pool->buffer = buffer;
+	pool->meta_buffer = meta_buffer;
     pool->block_size = block_size;
     pool->block_count = block_count;
     pool->alignment = alignment;
-	pool->owns_buffer = owns_buffer;
 
 	pool_build_free_list(pool);
 }
@@ -81,15 +87,21 @@ internal void* pool_alloc(void* handler, usize size, usize alignment) {
 		return nullptr;
 	}
 	pool->free_list = result->next;
-	result->next = nullptr;
 
-	return result;
+	usize pool_index = (usize)(result - pool->meta_buffer);
+	return (void*)((u8*)pool->buffer + pool_index * pool->block_size);
 }
 
 internal void pool_free(void* handler, void* ptr) {
 	PoolCtx* pool = (PoolCtx*)handler;
 
-	PoolBlock* block = (PoolBlock*)ptr;
+	assert(ptr >= pool->buffer);
+	assert((u8*)ptr < (u8*)pool->buffer + pool->block_size * pool->block_count);
+	assert(((u8*)ptr - (u8*)pool->buffer) % pool->block_size == 0);
+
+	usize pool_index = (uptr)((u8*)ptr - (u8*)pool->buffer) / pool->block_size;
+
+	PoolBlock* block = (PoolBlock*)(pool->meta_buffer + pool_index);
 	block->next = pool->free_list;
 	pool->free_list = block;
 }
@@ -114,52 +126,45 @@ Allocator pool_create(
     usize block_count,
     usize alignment
 ) {
-    PoolCtx* pool = memory_source_reserve(source, sizeof(PoolCtx), alignof(PoolCtx), 0);
-	if(!pool) {
+	assert(alignment != 0);
+	assert((alignment & (alignment - 1)) == 0);
+
+	block_size = align_up(block_size, alignment);
+
+	usize meta_buffer_size = sizeof(PoolCtx) + sizeof(PoolBlock) * block_count;
+    void* meta_buffer = memory_source_reserve(
+		source,
+		meta_buffer_size,
+		alignof(PoolCtx), // WARN: Works because `alignof(PoolCtx) % alignof(PoolBlock) == 0` (`PoolBlock` is just a pointer in a struct).
+		0
+	);
+	if(!meta_buffer) {
 		return (Allocator){0};
 	}
-	alignment = MAX(alignment, alignof(PoolBlock));
-	block_size = align_up(
-        MAX(block_size, sizeof(PoolBlock)),
-        alignment
-    );
+	PoolCtx* pool = (PoolCtx*)meta_buffer;
+
+	usize buffer_size = block_size * block_count;
 	void* buffer = memory_source_reserve(
         source,
-        block_size * block_count,
+        buffer_size,
 		alignment,
 		0
     );
 	if(!buffer) {
-		memory_source_release(source, pool, sizeof(*pool));
+		memory_source_release(source, meta_buffer, meta_buffer_size);
 		return (Allocator){0};
 	}
-	pool_init(pool, buffer, block_size, block_count, alignment, true);
 
-	return (Allocator){
-		.handler = pool,
-		.vt = &pool_vtable,
-		.source = source,
-	};
-}
-Allocator pool_create_from_buffer(
-	const MemorySource* source,
-	void* buffer,
-	usize buffer_size,
-	usize block_size,
-	usize alignment
-) {
-	alignment = MAX(alignment, alignof(PoolBlock));
-	block_size = align_up(
-        MAX(block_size, sizeof(PoolBlock)),
-        alignment
-    );
-	assert(buffer_size % block_size == 0);
+	usize header_size = align_up(sizeof(PoolCtx), alignof(PoolBlock));
 
-	PoolCtx* pool = memory_source_reserve(source, sizeof(PoolCtx), alignof(PoolCtx), 0);
-	if(!pool) {
-		return (Allocator){0};
-	}	
-	pool_init(pool, buffer, block_size, buffer_size / block_size, alignment, false);
+	pool_init(
+		pool,
+		buffer,
+		(PoolBlock*)((u8*)pool + header_size),
+		block_size,
+		block_count,
+		alignment
+	);
 
 	return (Allocator){
 		.handler = pool,
@@ -174,11 +179,8 @@ void pool_destroy(Allocator* allocator) {
     }
 	PoolCtx* pool = (PoolCtx*)allocator->handler;
 
-    if(pool->owns_buffer) {
-        memory_source_release(allocator->source, pool->buffer, pool->block_count * pool->block_size);
-    }
-
-	memory_source_release(allocator->source, pool, sizeof(*pool));
+	memory_source_release(allocator->source, pool->buffer, pool->block_count * pool->block_size);
+	memory_source_release(allocator->source, pool, sizeof(PoolCtx) + sizeof(PoolBlock) * pool->block_count);
 
     allocator->handler = nullptr;
     allocator->vt = nullptr;

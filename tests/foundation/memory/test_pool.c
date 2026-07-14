@@ -186,31 +186,6 @@ TEST(test_realloc_stub) {
 }
 
 // ============================================================
-// EXTERNAL BUFFER
-// ============================================================
-
-TEST(test_external_buffer) {
-    alignas(TestStruct) u8 buffer[16 * sizeof(TestStruct)];
-
-    Allocator local = pool_create_from_buffer(
-        &source,
-        buffer,
-        sizeof(buffer),
-        sizeof(TestStruct),
-        alignof(TestStruct)
-    );
-
-    TestStruct* value = ALLOC(&local, TestStruct);
-
-    ASSERT_NE_PTR(value, nullptr);
-
-    ASSERT_TRUE((u8*)value >= buffer);
-    ASSERT_TRUE((u8*)value < buffer + sizeof(buffer));
-
-    pool_destroy(&local);
-}
-
-// ============================================================
 // STRESS
 // ============================================================
 
@@ -278,10 +253,6 @@ TEST_ROOT(POOL, "Pool Tests",
 
     TEST_GROUP("API",
         TEST_NODE(test_realloc_stub)
-    ),
-
-    TEST_GROUP("External Buffer",
-        TEST_NODE(test_external_buffer)
     ),
 
     TEST_GROUP("Stress",
