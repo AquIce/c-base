@@ -118,6 +118,7 @@ internal_fn void assert_eq_##T(const char* fn, const char* file, int line, const
     } \
 }
 
+DEF_ASSERT_EQ_INT(char,  "%c")
 DEF_ASSERT_EQ_INT(i8,  "%d")
 DEF_ASSERT_EQ_INT(i16, "%d")
 DEF_ASSERT_EQ_INT(i32, "%d")
@@ -181,6 +182,7 @@ internal_fn void assert_eq_unsupported(const char* fn, const char* file, int lin
         u64: assert_eq_u64, \
         f32: assert_eq_f32, \
         f64: assert_eq_f64, \
+        char: assert_eq_char, \
 		default: assert_eq_unsupported \
     )(__func__, __FILE__, __LINE__, #b, #a, (b), (a))
 
