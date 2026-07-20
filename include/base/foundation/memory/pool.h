@@ -28,4 +28,8 @@ Allocator pool_create(
 );
 void pool_destroy(Allocator* allocator);
 
+internal_fn bool pool_is_full(const PoolCtx* pool) {
+	return pool->free_list == nullptr;
+}
+
 #endif // __BASE_FOUNDATION_MEMORY_POOL__
