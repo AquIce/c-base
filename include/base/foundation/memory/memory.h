@@ -10,6 +10,9 @@
 #define MEMORY_SOURCE_RESERVE_T(T, source) \
 	(T*)memory_source_reserve((source), sizeof(T), alignof(T), 0);
 
+#define MEMORY_SOURCE_RESERVE_NT(T, source, n) \
+	(T*)memory_source_reserve((source), sizeof(T) * (n), alignof(T), 0);
+
 typedef struct {
     usize allocations;
     usize frees;

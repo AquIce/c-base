@@ -351,8 +351,8 @@ TEST(test_buffer_multiple_allocations) {
 // ============================================================
 
 TEST_ROOT(MEMORY_SOURCE, "Memory Source Tests",
-    NULL,
-    NULL,
+    nullptr,
+    nullptr,
 
     TEST_GROUP("Creation",
         TEST_NODE(test_malloc_create),

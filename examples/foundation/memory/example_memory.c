@@ -6,7 +6,7 @@
 i32 main(void) {
 	MemorySource source = cmalloc_memory_source_create();
 
-	i32* value = (i32*)memory_source_reserve(&source, sizeof(i32), alignof(i32), 0);
+	i32* value = MEMORY_SOURCE_RESERVE_T(i32, &source);
 	if(!value) {
 		return 1;
 	}
