@@ -82,7 +82,7 @@ DynArray dynarray_create(
 		capacity,
 		elem_size,
 		alignment,
-		nullptr
+		POD_LIFETIME
 	);
 }
 DynArray dynarray_create_complex(
@@ -307,7 +307,56 @@ bool dynarray_resize(DynArray* dynarray, usize size) {
 	return true;
 }
 bool dynarray_shrink_to_fit(DynArray* dynarray) {
-	TODO_IMPL();
+	const ElementLifetime* lifetime = dynarray->descriptor.elem_lifetime;
+
+	if(dynarray->size == dynarray->descriptor.capacity) {
+		return true;
+	}
+	if(dynarray->size == 0) {
+		allocator_free(dynarray->descriptor.allocator, dynarray->buffer);
+		dynarray->buffer = nullptr;
+		dynarray->descriptor.capacity = 0;
+		return true;
+	}
+
+	void* buffer = allocator_alloc(
+		dynarray->descriptor.allocator,
+		dynarray->descriptor.elem_size * dynarray->size,
+		dynarray->descriptor.alignment
+	);
+	if(!buffer) {
+		return false;
+	}
+
+	if(!lifetime) {
+		(void)memcpy(
+			buffer,
+			dynarray->buffer,
+			dynarray->size * dynarray->descriptor.elem_size
+		);
+	} else if(lifetime->policy->move) {
+		for(usize i = 0; i < dynarray->size; i++) {
+			usize offset = i * dynarray->descriptor.elem_size;
+			lifetime->policy->move(
+				lifetime->ctx,
+				(u8*)buffer + offset,
+				(u8*)dynarray->buffer + offset
+			);
+		}
+	} else {
+		for(usize i = 0; i < dynarray->size; i++) {
+			usize offset = i * dynarray->descriptor.elem_size;
+			lifetime->policy->copy(
+				lifetime->ctx,
+				(u8*)buffer + offset,
+				(u8*)dynarray->buffer + offset
+			);
+		}
+	}
+	allocator_free(dynarray->descriptor.allocator, dynarray->buffer);
+	dynarray->buffer = buffer;
+	dynarray->descriptor.capacity = dynarray->size;
+	return true;
 }
 
 

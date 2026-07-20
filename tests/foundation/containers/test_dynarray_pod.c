@@ -195,6 +195,37 @@ TEST(test_pod_resize_zero) {
     dynarray_destroy(&arr);
 }
 
+TEST(test_pod_shrink_to_fit) {
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 4);
+
+    DYNARRAY_PUSH(&arr, 1);
+    DYNARRAY_PUSH(&arr, 2);
+    DYNARRAY_PUSH(&arr, 3);
+
+	dynarray_reserve(&arr, 10);
+
+    usize cap = arr.descriptor.capacity;
+
+    ASSERT_TRUE(dynarray_shrink_to_fit(&arr));
+
+    ASSERT_EQ(arr.descriptor.capacity, arr.size);
+
+    dynarray_destroy(&arr);
+}
+
+TEST(test_pod_shrink_to_fit_zero) {
+    DynArray arr = DYNARRAY_CREATE(i32, &arena, 0);
+
+	dynarray_reserve(&arr, 10);
+
+    ASSERT_TRUE(dynarray_shrink_to_fit(&arr));
+
+    ASSERT_EQ(arr.descriptor.capacity, 0);
+
+    dynarray_destroy(&arr);
+}
+
+
 // ============================================================
 // COPY
 // ============================================================
@@ -432,7 +463,9 @@ TEST_ROOT(DYNARRAY_POD, "DynArray POD Tests",
         TEST_NODE(test_pod_resize_past_capacity),
         TEST_NODE(test_pod_resize_shrink),
         TEST_NODE(test_pod_resize_same_size),
-        TEST_NODE(test_pod_resize_zero)
+        TEST_NODE(test_pod_resize_zero),
+		TEST_NODE(test_pod_shrink_to_fit),
+		TEST_NODE(test_pod_shrink_to_fit_zero)
     ),
 
     TEST_GROUP("Copy",
