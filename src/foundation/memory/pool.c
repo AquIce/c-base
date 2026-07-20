@@ -21,10 +21,10 @@ internal void pool_init(
 	usize alignment
 );
 
-internal void* pool_alloc(void* handler, usize size, usize alignment);
-internal void pool_free(void* handler, void* ptr);
-internal void* pool_realloc(void* handler, void* ptr, usize old_size, usize new_size);
-internal void pool_reset(void* handler);
+internal void* pool_alloc(const Allocator* alloc, usize size, usize alignment);
+internal void pool_free(const Allocator* alloc, void* ptr);
+internal void* pool_realloc(const Allocator* alloc, void* ptr, usize old_size, usize new_size);
+internal void pool_reset(const Allocator* alloc);
 
 internal const AllocatorVTable pool_vtable = {
     .alloc = pool_alloc,
@@ -76,8 +76,8 @@ internal void pool_init(
 	pool_build_free_list(pool);
 }
 
-internal void* pool_alloc(void* handler, usize size, usize alignment) {
-	PoolCtx* pool = (PoolCtx*)handler;
+internal void* pool_alloc(const Allocator* alloc, usize size, usize alignment) {
+	PoolCtx* pool = (PoolCtx*)alloc->handler;
 
 	assert(size <= pool->block_size);
 	assert(alignment <= pool->alignment);
@@ -92,8 +92,8 @@ internal void* pool_alloc(void* handler, usize size, usize alignment) {
 	return (void*)((u8*)pool->buffer + pool_index * pool->block_size);
 }
 
-internal void pool_free(void* handler, void* ptr) {
-	PoolCtx* pool = (PoolCtx*)handler;
+internal void pool_free(const Allocator* alloc, void* ptr) {
+	PoolCtx* pool = (PoolCtx*)alloc->handler;
 
 	assert(ptr >= pool->buffer);
 	assert((u8*)ptr < (u8*)pool->buffer + pool->block_size * pool->block_count);
@@ -106,8 +106,8 @@ internal void pool_free(void* handler, void* ptr) {
 	pool->free_list = block;
 }
 
-internal void* pool_realloc(void* handler, void* ptr, usize old_size, usize new_size) {
-	(void)handler;
+internal void* pool_realloc(const Allocator* alloc, void* ptr, usize old_size, usize new_size) {
+	(void)alloc;
 	(void)ptr;
 	(void)old_size;
 	(void)new_size;
@@ -115,8 +115,8 @@ internal void* pool_realloc(void* handler, void* ptr, usize old_size, usize new_
 	return nullptr;
 }
 
-internal void pool_reset(void* handler) {
-	PoolCtx* pool = (PoolCtx*)handler;
+internal void pool_reset(const Allocator* alloc) {
+	PoolCtx* pool = (PoolCtx*)alloc->handler;
 	pool_build_free_list(pool);
 }
 

@@ -9,10 +9,10 @@ typedef struct {
 
 internal void stack_init(StackCtx* stack, void* buffer, usize capacity);
 
-internal void* stack_alloc(void* handler, usize size, usize alignment);
-internal void stack_free(void* handler, void* ptr);
-internal void* stack_realloc(void* handler, void* ptr, usize old_size, usize new_size);
-internal void stack_reset(void* handler);
+internal void* stack_alloc(const Allocator* alloc, usize size, usize alignment);
+internal void stack_free(const Allocator* alloc, void* ptr);
+internal void* stack_realloc(const Allocator* alloc, void* ptr, usize old_size, usize new_size);
+internal void stack_reset(const Allocator* alloc);
 
 internal const AllocatorVTable stack_vtable = {
     .alloc = stack_alloc,
@@ -33,11 +33,11 @@ internal void stack_init(StackCtx* stack, void* buffer, usize capacity) {
     stack->offset = 0;
 }
 
-internal void* stack_alloc(void* handler, usize size, usize alignment) {
+internal void* stack_alloc(const Allocator* alloc, usize size, usize alignment) {
 	assert(alignment > 0);
 	assert((alignment & (alignment - 1)) == 0);
 
-	StackCtx* stack = (StackCtx*)handler;
+	StackCtx* stack = (StackCtx*)alloc->handler;
 	usize base_offset = stack->offset;
 	uptr min_header_address = align_up_ptr(base_offset, alignof(StackHeader));
 	uptr min_address = (uptr)(stack->buffer + min_header_address + sizeof(StackHeader));
@@ -60,9 +60,9 @@ internal void* stack_alloc(void* handler, usize size, usize alignment) {
 	return result;
 }
 
-internal void stack_free(void* handler, void* ptr) {
+internal void stack_free(const Allocator* alloc, void* ptr) {
 	if(!ptr) { return; }
-	StackCtx* stack = (StackCtx*)handler;
+	StackCtx* stack = (StackCtx*)alloc->handler;
 	StackHeader* header = compute_stack_header_ptr(ptr);
 	
 	// Only allow free on the last pointer
@@ -70,7 +70,7 @@ internal void stack_free(void* handler, void* ptr) {
 	stack->offset = header->previous_offset;
 }
 
-internal void* stack_realloc(void* handler, void* ptr, usize old_size, usize new_size) {
+internal void* stack_realloc(const Allocator* alloc, void* ptr, usize old_size, usize new_size) {
 	if(!ptr) {
 		return nullptr;
 	}
@@ -78,10 +78,10 @@ internal void* stack_realloc(void* handler, void* ptr, usize old_size, usize new
 		return ptr;
 	}
 	if(new_size == 0) {
-		stack_free(handler, ptr);
+		stack_free(alloc->handler, ptr);
 		return nullptr;
 	}
-	StackCtx* stack = (StackCtx*)handler;
+	StackCtx* stack = (StackCtx*)alloc->handler;
 	StackHeader* header = compute_stack_header_ptr(ptr);
 
 	// Only allow realloc on the last allocated pointer
@@ -94,12 +94,12 @@ internal void* stack_realloc(void* handler, void* ptr, usize old_size, usize new
 	return ptr;
 }
 
-internal void stack_reset(void* handler) {
-	((StackCtx*)handler)->offset = 0;
+internal void stack_reset(const Allocator* alloc) {
+	((StackCtx*)alloc->handler)->offset = 0;
 }
 
 Allocator stack_create(const MemorySource* source, usize capacity) {
-	StackCtx* stack = memory_source_reserve(source, sizeof(StackCtx), alignof(StackCtx), 0);
+	StackCtx* stack = MEMORY_SOURCE_RESERVE_T(StackCtx, source);
 	if(!stack) {
 		return (Allocator){0};
 	}

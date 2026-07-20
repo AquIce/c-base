@@ -1,13 +1,15 @@
 #include <base/foundation/memory/arena.h>
 
+#include <base/foundation/memory/allocator.h>
+
 // --= Local Header =--
 
 internal void arena_init(ArenaCtx* arena, void* buffer, usize capacity);
 
-internal void* arena_alloc(void* handler, usize size, usize alignment);
-internal void arena_free(void* handler, void* ptr);
-internal void* arena_realloc(void* handler, void* ptr, usize old_size, usize new_size);
-internal void arena_reset(void* handler);
+internal void* arena_alloc(const Allocator* alloc, usize size, usize alignment);
+internal void arena_free(const Allocator* alloc, void* ptr);
+internal void* arena_realloc(const Allocator* alloc, void* ptr, usize old_size, usize new_size);
+internal void arena_reset(const Allocator* alloc);
 
 internal const AllocatorVTable arena_vtable = {
     .alloc = arena_alloc,
@@ -24,11 +26,11 @@ internal void arena_init(ArenaCtx* arena, void* buffer, usize capacity) {
     arena->offset = 0;
 }
 
-internal void* arena_alloc(void* handler, usize size, usize alignment) {
+internal void* arena_alloc(const Allocator* alloc, usize size, usize alignment) {
 	assert(alignment > 0);
 	assert((alignment & (alignment - 1)) == 0);
 
-	ArenaCtx* arena = (ArenaCtx*)handler;
+	ArenaCtx* arena = (ArenaCtx*)alloc->handler;
 	uptr current = (uptr)(arena->buffer + arena->offset);
 	uptr aligned = align_up_ptr(current, alignment);
 	usize padding = (usize)(aligned - current);
@@ -46,13 +48,13 @@ internal void* arena_alloc(void* handler, usize size, usize alignment) {
 	return result;
 }
 
-internal void arena_free(void* handler, void* ptr) {
-	(void)handler;
+internal void arena_free(const Allocator* alloc, void* ptr) {
+	(void)alloc;
 	(void)ptr;
 }
 
-internal void* arena_realloc(void* handler, void* ptr, usize old_size, usize new_size) {
-	(void)handler;
+internal void* arena_realloc(const Allocator* alloc, void* ptr, usize old_size, usize new_size) {
+	(void)alloc;
 	(void)ptr;
 	(void)old_size;
 	(void)new_size;
@@ -60,12 +62,12 @@ internal void* arena_realloc(void* handler, void* ptr, usize old_size, usize new
 	return nullptr;
 }
 
-internal void arena_reset(void* handler) {
-	((ArenaCtx*)handler)->offset = 0;
+internal void arena_reset(const Allocator* alloc) {
+	((ArenaCtx*)alloc->handler)->offset = 0;
 }
 
 Allocator arena_create(const MemorySource* source, usize capacity) {
-	ArenaCtx* arena = memory_source_reserve(source, sizeof(ArenaCtx), alignof(ArenaCtx), 0);
+	ArenaCtx* arena = MEMORY_SOURCE_RESERVE_T(ArenaCtx, source);
 	if(!arena) {
 		return (Allocator){0};
 	}

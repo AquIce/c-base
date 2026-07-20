@@ -10,32 +10,34 @@
 #define NALLOC(allocator, T, n) \
 	((T*)allocator_alloc((allocator), sizeof(T) * (n), alignof(T)))
 
+typedef struct Allocator Allocator;
+
 typedef struct {
     void* (*alloc)(
-		void* handler,
+		const Allocator* alloc,
 		usize size,
 		usize alignment
 	);
     void (*free)(
-		void* handler,
+		const Allocator* alloc,
 		void* ptr
 	);
 	void* (*realloc)(
-		void* handler,
+		const Allocator* alloc,
 		void* ptr,
 		usize old_size,
 		usize new_size
 	);
 	void (*reset)(
-		void* handler
+		const Allocator* alloc
 	);
 } AllocatorVTable;
 
-typedef struct Allocator {
+struct Allocator {
     void* handler;
     const AllocatorVTable* vt;
 	const MemorySource* source;
-} Allocator;
+};
 
 void* allocator_alloc(const Allocator* allocator, usize size, usize alignment);
 void allocator_free(const Allocator* allocator, void* ptr);
