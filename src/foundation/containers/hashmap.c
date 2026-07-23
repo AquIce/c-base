@@ -321,7 +321,9 @@ bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
 	EqualsFunc equalsFunc = key_lifetime->policy->equals;
 
 	if(hashmap->elem_count + 1 >= hashmap->descriptor.capacity) {
-		hashmap_grow(hashmap);
+		if(!hashmap_grow(hashmap)) {
+			return false;
+		}
 	}
 
 	usize index = hashFunc(key_lifetime->ctx, key) % hashmap->descriptor.capacity;
