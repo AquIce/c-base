@@ -5,6 +5,7 @@
 #include <base/foundation/memory/allocator.h>
 
 #include <assert.h>
+#include <string.h>
 
 // --= Local Header =--
 
@@ -21,7 +22,7 @@ internal_fn usize hashmmap_entry_size(const HashMap* hashmap) {
 }
 
 internal_fn i32 hashmap_get_slot_state(const HashMap* hashmap, usize index) {
-	return *(i32*)((u8*)hashmap->meta_buffer + index);
+	return *(i32*)((HashMapSlotState*)hashmap->meta_buffer + index);
 }
 internal_fn void* hashmap_get_key(const HashMap* hashmap, usize index) {
 	return (
@@ -33,6 +34,8 @@ internal_fn void* hashmap_get_elem(const HashMap* hashmap, usize index) {
 		(u8*)hashmap->buffer + index * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size
 	);
 }
+
+internal bool hashmap_grow(HashMap* hashmap);
 
 internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, const void* elem);
 
@@ -131,7 +134,11 @@ HashMap hashmap_create_complex(
 		if(!buffer) {
 			return (HashMap){0};
 		}
-		meta_buffer = allocator_alloc(allocator, capacity, alignof(HashMapSlotState));
+		meta_buffer = allocator_alloc(
+			allocator,
+			capacity * sizeof(HashMapSlotState),
+			alignof(HashMapSlotState)
+		);
 		if(!meta_buffer) {
 			allocator_free(allocator, buffer);
 			return (HashMap){0};
@@ -196,6 +203,105 @@ bool hashmap_reserve(HashMap* hashmap, usize capacity) {
 	TODO_IMPL();
 }
 
+internal bool hashmap_grow(HashMap* hashmap) {
+
+	usize new_capacity = hashmap->descriptor.capacity == 0
+		? 1
+		: hashmap->descriptor.capacity * HASHMAP_GROW_FACTOR;
+
+	const Allocator* alloc = hashmap->descriptor.allocator;
+
+	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
+	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
+
+	assert(key_lifetime);
+	assert(!elem_lifetime || elem_lifetime->policy->move || elem_lifetime->policy->copy);
+
+	void* buffer = allocator_alloc(
+		alloc,
+		hashmmap_entry_size(hashmap) * new_capacity,
+		hashmap->descriptor.alignment
+	);
+
+	if(!buffer) {
+		return false;
+	}
+	void* meta_buffer = allocator_alloc(
+		alloc,
+		new_capacity * sizeof(HashMapSlotState),
+		alignof(HashMapSlotState)
+	);
+	if(!meta_buffer) {
+		allocator_free(alloc, buffer);
+		return false;
+	}
+
+	if(key_lifetime->policy->move) {
+		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
+			key_lifetime->policy->move(
+				key_lifetime->ctx,
+				(u8*)buffer + i * hashmmap_entry_size(hashmap),
+				hashmap_get_key(hashmap, i)
+			);
+		}
+	} else if(key_lifetime->policy->copy) {
+		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
+			key_lifetime->policy->copy(
+				key_lifetime->ctx,
+				(u8*)buffer + i * hashmmap_entry_size(hashmap),
+				hashmap_get_key(hashmap, i)
+			);
+		}
+	} else {
+		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
+			(void)memmove(
+				(u8*)buffer + i * hashmmap_entry_size(hashmap),
+				hashmap_get_key(hashmap, i),
+				hashmap->descriptor.key_size
+			);
+		}
+	}
+
+	if(!elem_lifetime) {
+		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
+			(void)memmove(
+				(u8*)buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
+				hashmap_get_elem(hashmap, i),
+				hashmap->descriptor.elem_size
+			);
+		}
+	} else if(key_lifetime->policy->move) {
+		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
+			key_lifetime->policy->move(
+				key_lifetime->ctx,
+				(u8*)buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
+				hashmap_get_elem(hashmap, i)
+			);
+		}
+	} else {
+		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
+			key_lifetime->policy->copy(
+				key_lifetime->ctx,
+				(u8*)buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
+				hashmap_get_elem(hashmap, i)
+			);
+		}
+	}
+
+	(void)memmove(
+		meta_buffer,
+		hashmap->meta_buffer,
+		hashmap->elem_count * sizeof(HashMapSlotState)
+	);
+
+	hashmap->buffer = buffer;
+	hashmap->meta_buffer = meta_buffer;
+	hashmap->descriptor.capacity = new_capacity;
+
+	return true;
+}
+
+
 // --= Modifiers =--
 
 internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, const void* elem) {
@@ -215,7 +321,7 @@ bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
 	EqualsFunc equalsFunc = key_lifetime->policy->equals;
 
 	if(hashmap->elem_count + 1 >= hashmap->descriptor.capacity) {
-		TODO("Grow");
+		hashmap_grow(hashmap);
 	}
 
 	usize index = hashFunc(key_lifetime->ctx, key) % hashmap->descriptor.capacity;
