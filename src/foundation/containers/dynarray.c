@@ -32,41 +32,35 @@ internal void dynarray_policy_dtor(void* ctx, void* elem) {
 	(void)ctx;
 	dynarray_destroy((DynArray*)elem);
 }
+internal void dynarray_policy_copy(void* ctx, void* dest, const void* src) {
+	TODO_IMPL();
+}
+internal void dynarray_policy_move(void* ctx, void* dest, void* src) {
+	TODO_IMPL();
+}
+internal bool dynarray_policy_equals(void* ctx, const void* elem, const void* other) {
+	TODO_IMPL();
+}
+internal usize dynarray_policy_hash(void* ctx, const void* object) {
+	TODO_IMPL();
+}
+
+// TODO: Add
+// - `copy`
+// - `move`
+// - `equals`
+// - `hash`
 
 const ElementPolicy DYNARRAY_ELEMENT_POLICY = (ElementPolicy){
 	.ctor = &dynarray_policy_ctor,
 	.dtor = &dynarray_policy_dtor,
+	.copy = &dynarray_policy_copy,
+	.move = &dynarray_policy_move,
+	.equals = &dynarray_policy_equals,
+	// NOTE: DynArrays are not comparable
+	.compare = nullptr,
+	.hash = &dynarray_policy_hash,
 };
-
-DynArrayDescriptor dynarray_ctx_make(
-    const Allocator* allocator,
-    size_t capacity,
-    size_t elem_size,
-    size_t alignment
-) {
-	return dynarray_ctx_make_complex(
-		allocator,
-		capacity,
-		elem_size,
-		alignment,
-		POD_LIFETIME
-	);
-}
-DynArrayDescriptor dynarray_ctx_make_complex(
-    const Allocator* allocator,
-    size_t capacity,
-    size_t elem_size,
-    size_t alignment,
-    const ElementLifetime* lifetime
-) {
-	return (DynArrayDescriptor){
-		.capacity = capacity,
-		.elem_size = elem_size,
-		.alignment = alignment,
-		.allocator = allocator,
-		.elem_lifetime = lifetime
-	};
-}
 
 
 // --= Creation / Destruction =--
@@ -153,7 +147,7 @@ bool dynarray_copy_walloc(
 	);
 	if(!buffer) {
 		return false;
-	}	
+	}
 	if(lifetime == POD_LIFETIME) {
 		(void)memcpy(
 			buffer,
@@ -538,7 +532,7 @@ bool dynarray_insert(
 			elem
 		);
 	}
-	
+
 	dynarray->size++;
 
 	return true;
