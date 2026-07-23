@@ -50,20 +50,6 @@ typedef struct {
 
 extern const ElementPolicy DYNARRAY_ELEMENT_POLICY;
 
-DynArrayDescriptor dynarray_ctx_make(
-    const Allocator* allocator,
-    size_t capacity,
-    size_t elem_size,
-    size_t alignment
-);
-DynArrayDescriptor dynarray_ctx_make_complex(
-    const Allocator* allocator,
-    size_t capacity,
-    size_t elem_size,
-    size_t alignment,
-    const ElementLifetime* lifetime
-);
-
 
 // --= Creation / Destruction =--
 
