@@ -41,7 +41,7 @@ typedef intptr_t iptr;
     do { \
         fprintf(stderr, "TODO: " fmt " (%s:%d)\n", ##__VA_ARGS__, __FILE__, __LINE__); \
         abort(); \
-    } while (0)
+    } while(0)
 
 #define TODO_IMPL() \
     TODO("%s has not been implemented yet", __func__)
@@ -54,5 +54,21 @@ typedef intptr_t iptr;
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+
+#ifndef UNREACHABLE
+#  if defined(__GNUC__) || defined(__clang__)
+#    define UNREACHABLE(reason) \
+        do { \
+            fprintf(stderr, "UNREACHABLE: %s (%s:%d)\n", (reason), __FILE__, __LINE__); \
+            __builtin_unreachable(); \
+        } while(0)
+#  else
+#    define UNREACHABLE(reason) \
+        do { \
+            fprintf(stderr, "UNREACHABLE: %s (%s:%d)\n", (reason), __FILE__, __LINE__); \
+            abort(); \
+        } while(0)
+#  endif
+#endif
 
 #endif // __BASE_FOUNDATION_MACROS__
