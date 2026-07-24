@@ -110,7 +110,18 @@ bool hashmap_reserve(HashMap*, usize capacity);
 
 // --= Element Access =--
 
+internal_fn usize hashmap_hash(const HashMap* hashmap, const void* key) {
+	return hashmap->descriptor.key_lifetime->policy->hash(
+		hashmap->descriptor.key_lifetime->ctx, key
+	) % hashmap->descriptor.capacity;
+}
+
+bool hashmap_has(const HashMap* hashmap, const void* key);
+
 internal_fn void* hashmap_at(HashMap* hashmap, const void* key) {
+	if(!hashmap_has(hashmap, key)) {
+		return nullptr;
+	}
 	usize hash = hashmap->descriptor.key_lifetime->policy->hash(
 		hashmap->descriptor.key_lifetime->ctx,
 		key
@@ -118,6 +129,9 @@ internal_fn void* hashmap_at(HashMap* hashmap, const void* key) {
 	return (void*)((u8*)hashmap->buffer + hash * hashmap->descriptor.elem_size);
 }
 internal_fn const void* hashmap_at_const(const HashMap* hashmap, const void* key) {
+	if(!hashmap_has(hashmap, key)) {
+		return nullptr;
+	}
 	usize hash = hashmap->descriptor.key_lifetime->policy->hash(
 		hashmap->descriptor.key_lifetime->ctx,
 		key
