@@ -35,6 +35,15 @@ internal_fn void* hashmap_get_elem(const HashMap* hashmap, usize index) {
 	);
 }
 
+internal void hashmap_copy_buffers_into(
+	HashMap* hashmap,
+	void* dest_buffer,
+	void* dest_meta_buffer,
+	void* src_buffer,
+	void* src_meta_buffer,
+	usize capacity
+);
+
 internal bool hashmap_grow(HashMap* hashmap);
 
 internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, void* elem);
@@ -169,6 +178,71 @@ void hashmap_destroy(HashMap* hashmap) {
 }
 
 
+internal void hashmap_copy_buffers_into(
+	HashMap* hashmap,
+	void* dest_buffer,
+	void* dest_meta_buffer,
+	void* src_buffer,
+	void* src_meta_buffer,
+	usize capacity
+) {
+	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
+	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
+
+	assert(key_lifetime && key_lifetime->policy && key_lifetime->policy->hash);
+	assert(!elem_lifetime || elem_lifetime->policy->move || elem_lifetime->policy->copy);
+
+	if(key_lifetime->policy->copy) {
+		for(usize i = 0; i < capacity; i++) {
+			key_lifetime->policy->copy(
+				key_lifetime->ctx,
+				(u8*)dest_buffer + i * hashmmap_entry_size(hashmap),
+				(u8*)src_buffer + i * hashmmap_entry_size(hashmap)
+			);
+		}
+	} else {
+		for(usize i = 0; i < capacity; i++) {
+			(void)memmove(
+				(u8*)dest_buffer + i * hashmmap_entry_size(hashmap),
+				(u8*)src_buffer + i * hashmmap_entry_size(hashmap),
+				hashmap->descriptor.key_size
+			);
+		}
+	}
+
+	if(!elem_lifetime) {
+		for(usize i = 0; i < capacity; i++) {
+			(void)memmove(
+				(u8*)dest_buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
+				(u8*)src_buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
+				hashmap->descriptor.elem_size
+			);
+		}
+	} else if(key_lifetime->policy->move) {
+		for(usize i = 0; i < capacity; i++) {
+			key_lifetime->policy->move(
+				key_lifetime->ctx,
+				(u8*)dest_buffer+ i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
+				(u8*)src_buffer+ i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size
+			);
+		}
+	} else {
+		for(usize i = 0; i < capacity; i++) {
+			key_lifetime->policy->copy(
+				key_lifetime->ctx,
+				(u8*)dest_buffer+ i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
+				(u8*)src_buffer+ i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size
+			);
+		}
+	}
+
+	(void)memmove(
+		dest_meta_buffer,
+		src_meta_buffer,
+		capacity * sizeof(HashMapSlotState)
+	);
+}
+
 // NOTE: Copies every element from src to dest
 // This can fall into one of the following cases
 // - POD type				-> copied using `memset`
@@ -185,7 +259,43 @@ bool hashmap_copy_walloc(
     const HashMap* src,
 	const Allocator* allocator
 ) {
-	TODO_IMPL();
+	const ElementLifetime* elem_lifetime = src->descriptor.elem_lifetime;
+
+	assert(!elem_lifetime || elem_lifetime->policy);
+
+	if(elem_lifetime && !elem_lifetime->policy->copy) {
+		return false;
+	}
+
+
+	void* buffer = allocator_alloc(
+		allocator,
+		hashmmap_entry_size(src) * src->descriptor.capacity,
+		src->descriptor.alignment
+	);
+	if(!buffer) {
+		return false;
+	}
+	void* meta_buffer = allocator_alloc(
+		allocator,
+		src->descriptor.capacity* sizeof(HashMapSlotState),
+		alignof(HashMapSlotState)
+	);
+	if(!meta_buffer) {
+		allocator_free(allocator, buffer);
+		return false;
+	}
+
+	hashmap_copy_buffers_into(
+		(HashMap*)src, // TODO: Probably somethings about this (figure out const pointers)
+		dest->buffer,
+		dest->meta_buffer,
+		src->meta_buffer,
+		src->meta_buffer,
+		src->descriptor.capacity
+	);
+
+	return true;
 }
 // NOTE: Moves the whole array, not the elements (ownership transfer)
 // WARN: Empties `src`
@@ -193,7 +303,12 @@ void hashmap_move(
 	HashMap* dest,
 	HashMap* src
 ) {
-	TODO_IMPL();
+	hashmap_destroy(dest);
+	*dest = *src;
+	// TODO: Figure out what fields need to be reset
+	src->buffer = nullptr;
+	src->meta_buffer = nullptr;
+    src->elem_count = 0;
 }
 
 
@@ -201,6 +316,36 @@ void hashmap_move(
 
 bool hashmap_reserve(HashMap* hashmap, usize capacity) {
 	TODO_IMPL();
+}
+
+bool hashmap_has(const HashMap *hashmap, const void *key) {
+
+	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
+	const ElementLifetime* elem_lifetime = hashmap->descriptor.key_lifetime;
+
+	assert(key_lifetime && key_lifetime->policy && key_lifetime->policy->hash);
+	assert(!elem_lifetime || elem_lifetime->policy);
+
+	usize index = hashmap_hash(hashmap, key);
+
+	for(usize probes = 0; probes < hashmap->descriptor.capacity; probes++) {
+        switch(hashmap_get_slot_state(hashmap, index)) {
+            case HASHMAP_SLOT_EMPTY:
+				return false;
+
+            case HASHMAP_SLOT_TOMBSTONE:
+                index = (index + 1) % hashmap->descriptor.capacity;
+                break;
+
+            case HASHMAP_SLOT_OCCUPIED:
+                return true;
+
+            default:
+                UNREACHABLE("Invalid hashmap slot state");
+        }
+	}
+
+	UNREACHABLE("Hashmap full");
 }
 
 internal bool hashmap_grow(HashMap* hashmap) {
@@ -211,18 +356,11 @@ internal bool hashmap_grow(HashMap* hashmap) {
 
 	const Allocator* alloc = hashmap->descriptor.allocator;
 
-	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
-	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
-
-	assert(key_lifetime);
-	assert(!elem_lifetime || elem_lifetime->policy->move || elem_lifetime->policy->copy);
-
 	void* buffer = allocator_alloc(
 		alloc,
 		hashmmap_entry_size(hashmap) * new_capacity,
 		hashmap->descriptor.alignment
 	);
-
 	if(!buffer) {
 		return false;
 	}
@@ -236,55 +374,16 @@ internal bool hashmap_grow(HashMap* hashmap) {
 		return false;
 	}
 
-	if(key_lifetime->policy->copy) {
-		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
-			key_lifetime->policy->copy(
-				key_lifetime->ctx,
-				(u8*)buffer + i * hashmmap_entry_size(hashmap),
-				hashmap_get_key(hashmap, i)
-			);
-		}
-	} else {
-		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
-			(void)memmove(
-				(u8*)buffer + i * hashmmap_entry_size(hashmap),
-				hashmap_get_key(hashmap, i),
-				hashmap->descriptor.key_size
-			);
-		}
-	}
-
-	if(!elem_lifetime) {
-		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
-			(void)memmove(
-				(u8*)buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
-				hashmap_get_elem(hashmap, i),
-				hashmap->descriptor.elem_size
-			);
-		}
-	} else if(key_lifetime->policy->move) {
-		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
-			key_lifetime->policy->move(
-				key_lifetime->ctx,
-				(u8*)buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
-				hashmap_get_elem(hashmap, i)
-			);
-		}
-	} else {
-		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
-			key_lifetime->policy->copy(
-				key_lifetime->ctx,
-				(u8*)buffer + i * hashmmap_entry_size(hashmap) + hashmap->descriptor.key_size,
-				hashmap_get_elem(hashmap, i)
-			);
-		}
-	}
-
-	(void)memmove(
+	hashmap_copy_buffers_into(
+		hashmap,
+		buffer,
 		meta_buffer,
+		hashmap->buffer,
 		hashmap->meta_buffer,
-		hashmap->elem_count * sizeof(HashMapSlotState)
+		hashmap->descriptor.capacity
 	);
+
+	TODO("If it exists, call `ctor` on new element");
 
 	hashmap->buffer = buffer;
 	hashmap->meta_buffer = meta_buffer;
@@ -351,16 +450,13 @@ bool hashmap_insert(HashMap* hashmap, const void* key, void* elem) {
 	assert(key_lifetime->policy->hash && key_lifetime->policy->equals);
 	assert(!elem_lifetime || elem_lifetime->policy);
 
-	HashFunc hashFunc = key_lifetime->policy->hash;
-	EqualsFunc equalsFunc = key_lifetime->policy->equals;
-
 	if(hashmap->elem_count + 1 >= hashmap->descriptor.capacity) {
 		if(!hashmap_grow(hashmap)) {
 			return false;
 		}
 	}
 
-	usize index = hashFunc(key_lifetime->ctx, key) % hashmap->descriptor.capacity;
+	usize index = hashmap_hash(hashmap, key);
 
 	usize tombstone = INVALID_INDEX;
 
