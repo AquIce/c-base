@@ -34,7 +34,11 @@ typedef struct {
 
 	const Allocator* allocator;
 
+	// NOTE: Key lifetime is mandatory (for the `hash`).
+	// If it has a `copy`, it will be copied, otherwise, it is copied as a POD.
 	const ElementLifetime* key_lifetime;
+	// NOTE :Element lifetime is optional.
+	// If it has a `move`, it will be moved, if if it has a `copy`, it will be copied, otherwise it is copied/moved as a POD.
 	const ElementLifetime* elem_lifetime;
 } HashMapDescriptor;
 
@@ -124,7 +128,7 @@ internal_fn const void* hashmap_at_const(const HashMap* hashmap, const void* key
 
 // --= Modifiers =--
 
-bool hashmap_insert(HashMap*, const void* key, const void* elem);
+bool hashmap_insert(HashMap*, const void* key, void* elem);
 
 bool hashmap_remove(HashMap*, const void* key);
 

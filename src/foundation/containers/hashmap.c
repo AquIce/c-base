@@ -37,7 +37,7 @@ internal_fn void* hashmap_get_elem(const HashMap* hashmap, usize index) {
 
 internal bool hashmap_grow(HashMap* hashmap);
 
-internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, const void* elem);
+internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, void* elem);
 
 internal void hashmap_reset_state(HashMap* hashmap);
 internal void hashmap_reset_destructive(HashMap* hashmap);
@@ -236,15 +236,7 @@ internal bool hashmap_grow(HashMap* hashmap) {
 		return false;
 	}
 
-	if(key_lifetime->policy->move) {
-		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
-			key_lifetime->policy->move(
-				key_lifetime->ctx,
-				(u8*)buffer + i * hashmmap_entry_size(hashmap),
-				hashmap_get_key(hashmap, i)
-			);
-		}
-	} else if(key_lifetime->policy->copy) {
+	if(key_lifetime->policy->copy) {
 		for(usize i = 0; i < hashmap->descriptor.capacity; i++) {
 			key_lifetime->policy->copy(
 				key_lifetime->ctx,
@@ -304,12 +296,54 @@ internal bool hashmap_grow(HashMap* hashmap) {
 
 // --= Modifiers =--
 
-internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, const void* elem) {
-	TODO_IMPL();
+internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, void* elem) {
+	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
+	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
+
+	assert(key_lifetime);
+	assert(!elem_lifetime || elem_lifetime->policy->move || elem_lifetime->policy->copy);
+
+	if(key_lifetime->policy->copy) {
+		key_lifetime->policy->copy(
+			key_lifetime->ctx,
+			hashmap_get_key(hashmap, index),
+			key
+		);
+	} else {
+		(void)memmove(
+			hashmap_get_key(hashmap, index),
+			key,
+			hashmap->descriptor.key_size
+		);
+	}
+
+	if(!elem_lifetime) {
+		(void)memmove(
+			hashmap_get_elem(hashmap, index),
+			elem,
+			hashmap->descriptor.elem_size
+		);
+	} else if(key_lifetime->policy->move) {
+		key_lifetime->policy->move(
+			key_lifetime->ctx,
+			hashmap_get_elem(hashmap, index),
+			(void*)elem
+		);
+	} else {
+		key_lifetime->policy->copy(
+			key_lifetime->ctx,
+			hashmap_get_elem(hashmap, index),
+			elem
+		);
+	}
+
+	hashmap->elem_count++;
 }
 
+
+
 // WARN: In the case of a movable policy datatype, elem is cast to `void*` and invalidated
-bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
+bool hashmap_insert(HashMap* hashmap, const void* key, void* elem) {
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
 	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
 
