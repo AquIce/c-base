@@ -6,8 +6,6 @@
 #include <base/foundation/memory/arena.h>
 #include <base/foundation/memory/memory.h>
 
-#include <stdio.h>
-
 // ============================================================
 // GLOBAL TEST FIXTURE (ROOT-OWNED)
 // ============================================================
@@ -58,13 +56,13 @@ TEST(test_pod_create_macro) {
 
     ASSERT_EQ(arr.descriptor.capacity, 4);
     ASSERT_EQ(arr.descriptor.elem_size, sizeof(u8));
-    ASSERT_EQ(arr.descriptor.alignment, _Alignof(u8));
+    ASSERT_EQ(arr.descriptor.alignment, alignof(u8));
     ASSERT_EQ_PTR(arr.descriptor.allocator, &arena);
     ASSERT_EQ_PTR(arr.descriptor.elem_lifetime, nullptr);
 }
 
 TEST(test_pod_destroy) {
-    DynArray arr = dynarray_create(&arena, 4, sizeof(i32), _Alignof(i32));
+    DynArray arr = dynarray_create(&arena, 4, sizeof(i32), alignof(i32));
 
     dynarray_destroy(&arr);
 
