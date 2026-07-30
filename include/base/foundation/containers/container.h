@@ -13,10 +13,10 @@ typedef bool  (*EqualsFunc)(void* ctx, const void* elem, const void* other);
 typedef i32   (*CompareFunc)(void* ctx, const void* elem, const void* other);
 typedef usize (*HashFunc)(void* ctx, const void* object);
 
-// WARN: Invariant: `assert(!policy || (policy->ctor && policy->dtor));`
-// WARN: Invariant: `assert(!policy || policy->equals);`
 typedef struct {
+	// NOTE: If ctor is not provided, the element described by this policy is considered TRIVIALLY CONSTRUCTIBLE
 	CtorFunc ctor;
+	// NOTE: If dtor is not provided, the element described by this policy is considered TRIVIALLY DESTRUCTIBLE
 	DtorFunc dtor;
 
 	// NOTE: If copy is not provided, the element described by this policy is considered NOT COPYABLE

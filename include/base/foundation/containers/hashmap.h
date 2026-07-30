@@ -4,23 +4,40 @@
 #include <base/foundation/memory/allocator.h>
 #include <base/foundation/containers/container.h>
 
-#define HASHMAP_CREATE(T, allocator, hashFunc, capacity) \
-	hashmap_create((allocator), (hashFunc), (capacity), sizeof(T), alignof(T))
+#define HASHMAP_CREATE(K, V, allocator, capacity, key_lifetime) \
+	hashmap_create( \
+		(allocator), \
+		(capacity), \
+		sizeof(K), \
+		sizeof(V), \
+		alignof(K), \
+		alignof(V), \
+		(key_lifetime) \
+	)
 
-#define HASHMAP_CREATE_COMPLEX(T, allocator, hashFunc, capacity, policy) \
-	hashmap_create_complex((allocator), (hashFunc), (capacity), sizeof(T), alignof(T), (policy))
+#define HASHMAP_CREATE_COMPLEX(K, V, allocator, capacity, key_lifetime, elem_lifetime) \
+	hashmap_create_complex( \
+		(allocator), \
+		(capacity), \
+		sizeof(K), \
+		sizeof(V), \
+		alignof(K), \
+		alignof(V), \
+		(key_lifetime) \
+		(elem_lifetime) \
+	)
 
-#define HASHMAP_AT(arr, T, key) \
+#define HASHMAP_AT(hashmap, T, key) \
     ({ \
         __auto_type tmp = (key); \
-        (T*)hashmap_at((arr), (void*)&tmp); \
+        (T*)hashmap_at((hashmap), (void*)&tmp); \
     })
 
-#define HASHMAP_INSERT(arr, key, value) \
+#define HASHMAP_INSERT(hashmap, key, value) \
     ({ \
         __auto_type tmp_key = (key); \
         __auto_type tmp_value = (value); \
-        hashmap_insert((arr), ((void*)&tmp_key), (void*)&tmp_value); \
+        hashmap_insert((hashmap), ((void*)&tmp_key), (void*)&tmp_value); \
     })
 
 #define HASHMAP_GROW_FACTOR 2
@@ -30,7 +47,8 @@ typedef struct {
 
 	usize key_size;
 	usize elem_size;
-	usize alignment;
+	usize key_alignment;
+	usize elem_alignment;
 
 	const Allocator* allocator;
 
@@ -44,6 +62,7 @@ typedef struct {
 
 typedef struct {
 	void* buffer;
+	void* keys_buffer;
 	void* meta_buffer;
 	usize elem_count;
 
@@ -63,7 +82,8 @@ HashMap hashmap_create(
 	usize capacity,
 	usize key_size,
 	usize elem_size,
-	usize alignment,
+	usize key_alignment,
+	usize elem_alignment,
 	const ElementLifetime* key_lifetime
 );
 HashMap hashmap_create_complex(
@@ -71,9 +91,10 @@ HashMap hashmap_create_complex(
 	usize capacity,
 	usize key_size,
 	usize elem_size,
-	usize alignment,
-	const ElementLifetime* key_policy,
-	const ElementLifetime* elem_policy
+	usize key_alignment,
+	usize elem_alignment,
+	const ElementLifetime* key_lifetime,
+	const ElementLifetime* elem_lifetime
 );
 void hashmap_destroy(HashMap*);
 
@@ -105,40 +126,15 @@ internal_fn bool hashmap_empty(const HashMap* hashmap) {
 	return hashmap->elem_count == 0;
 }
 
-bool hashmap_reserve(HashMap*, usize capacity);
+bool hashmap_grow(HashMap*, usize new_capacity);
 
 
 // --= Element Access =--
 
-internal_fn usize hashmap_hash(const HashMap* hashmap, const void* key) {
-	return hashmap->descriptor.key_lifetime->policy->hash(
-		hashmap->descriptor.key_lifetime->ctx, key
-	) % hashmap->descriptor.capacity;
-}
+void* hashmap_at(const HashMap* hashmap, const void* key);
+const void* hashmap_at_const(const HashMap* hashmap, const void* key);
 
 bool hashmap_has(const HashMap* hashmap, const void* key);
-
-internal_fn void* hashmap_at(HashMap* hashmap, const void* key) {
-	if(!hashmap_has(hashmap, key)) {
-		return nullptr;
-	}
-	usize hash = hashmap->descriptor.key_lifetime->policy->hash(
-		hashmap->descriptor.key_lifetime->ctx,
-		key
-	);
-	return (void*)((u8*)hashmap->buffer + hash * hashmap->descriptor.elem_size);
-}
-internal_fn const void* hashmap_at_const(const HashMap* hashmap, const void* key) {
-	if(!hashmap_has(hashmap, key)) {
-		return nullptr;
-	}
-	usize hash = hashmap->descriptor.key_lifetime->policy->hash(
-		hashmap->descriptor.key_lifetime->ctx,
-		key
-	);
-	return (const void*)((u8*)hashmap->buffer + hash * hashmap->descriptor.elem_size);
-}
-
 
 // --= Modifiers =--
 
