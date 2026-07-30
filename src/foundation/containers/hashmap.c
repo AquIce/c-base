@@ -41,21 +41,21 @@ internal_fn void* hashmap_get_elem(const HashMap* hashmap, usize index) {
 }
 
 internal void hashmap_copy_buffers_into(
-	HashMap* hashmap,
+	const HashMap*,
 	void* dest_buffer,
 	void* dest_keys_buffer,
 	void* dest_meta_buffer,
-	void* src_buffer,
-	void* src_keys_buffer,
-	void* src_meta_buffer,
+	const void* src_buffer,
+	const void* src_keys_buffer,
+	const void* src_meta_buffer,
 	usize capacity
 );
 
-internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, void* elem);
-internal void hashmap_remove_at_slot(HashMap* hashmap, usize index);
+internal void hashmap_insert_at_slot(HashMap*, usize index, const void* key, const void* elem);
+internal void hashmap_remove_at_slot(HashMap*, usize index);
 
-internal void hashmap_reset_state(HashMap* hashmap);
-internal void hashmap_reset_destructive(HashMap* hashmap);
+internal void hashmap_reset_state(HashMap*);
+internal void hashmap_reset_destructive(HashMap*);
 
 // --= Element Lifetime =--
 
@@ -171,6 +171,7 @@ HashMap hashmap_create_complex(
 		);
 		if(!meta_buffer) { goto free_keys_buffer; }
 
+		// TODO: Figure out whether I can use memset once
 		for(usize i = 0; i < capacity; i++) {
 			*((HashMapSlotState*)meta_buffer + i) = HASHMAP_SLOT_EMPTY;
 		}
@@ -209,13 +210,13 @@ void hashmap_destroy(HashMap* hashmap) {
 
 
 internal void hashmap_copy_buffers_into(
-	HashMap* hashmap,
+	const HashMap* hashmap,
 	void* dest_buffer,
 	void* dest_meta_buffer,
 	void* dest_keys_buffer,
-	void* src_buffer,
-	void* src_meta_buffer,
-	void* src_keys_buffer,
+	const void* src_buffer,
+	const void* src_meta_buffer,
+	const void* src_keys_buffer,
 	usize capacity
 ) {
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
@@ -501,7 +502,7 @@ bool hashmap_has(const HashMap *hashmap, const void *key) {
 
 // --= Modifiers =--
 
-internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, void* elem) {
+internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, const void* elem) {
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
 	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
 
@@ -586,7 +587,7 @@ internal void hashmap_remove_at_slot(HashMap* hashmap, usize index) {
 
 
 // WARN: In the case of a movable policy datatype, elem is cast to `void*` and invalidated
-bool hashmap_insert(HashMap* hashmap, const void* key, void* elem) {
+bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
 	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
 

@@ -37,7 +37,7 @@
     ({ \
         __auto_type tmp_key = (key); \
         __auto_type tmp_value = (value); \
-        hashmap_insert((hashmap), ((void*)&tmp_key), (void*)&tmp_value); \
+        hashmap_insert((hashmap), ((const void*)&tmp_key), (const void*)&tmp_value); \
     })
 
 #define HASHMAP_GROW_FACTOR 2
@@ -136,9 +136,10 @@ const void* hashmap_at_const(const HashMap* hashmap, const void* key);
 
 bool hashmap_has(const HashMap* hashmap, const void* key);
 
+
 // --= Modifiers =--
 
-bool hashmap_insert(HashMap*, const void* key, void* elem);
+bool hashmap_insert(HashMap*, const void* key, const void* elem);
 
 bool hashmap_remove(HashMap*, const void* key);
 
