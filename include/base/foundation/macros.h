@@ -55,17 +55,19 @@ typedef intptr_t iptr;
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
+#define ARRAY_COUNT(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 #ifndef UNREACHABLE
 #  if defined(__GNUC__) || defined(__clang__)
-#    define UNREACHABLE(reason) \
+#    define UNREACHABLE(fmt, ...) \
         do { \
-            fprintf(stderr, "UNREACHABLE: %s (%s:%d)\n", (reason), __FILE__, __LINE__); \
+			fprintf(stderr, "UNREACHABLE [%s:%d] %s: " fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
             __builtin_unreachable(); \
         } while(0)
 #  else
-#    define UNREACHABLE(reason) \
+#    define UNREACHABLE(fmt, ...) \
         do { \
-            fprintf(stderr, "UNREACHABLE: %s (%s:%d)\n", (reason), __FILE__, __LINE__); \
+			fprintf(stderr, "UNREACHABLE [%s:%d] %s: " fmt "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__); \
             abort(); \
         } while(0)
 #  endif

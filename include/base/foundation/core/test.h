@@ -104,10 +104,19 @@ internal int tests_failed = 0;
 		TEST_FAIL_RESULT; \
 	} while(0)
 
+#define TEST_SKIP() return;
+
 #define ASSERT_TRUE(expr) \
 	do { \
 		if(!(expr)) { \
 			TEST_FAIL(__func__, __FILE__, __LINE__, "Expected TRUE but was FALSE: %s", #expr); \
+		} \
+	} while(0)
+
+#define ASSERT_FALSE(expr) \
+	do { \
+		if(expr) { \
+			TEST_FAIL(__func__, __FILE__, __LINE__, "Expected FALSE but was TRUE: %s", #expr); \
 		} \
 	} while(0)
 
@@ -122,12 +131,12 @@ DEF_ASSERT_EQ_INT(char,  "%c")
 DEF_ASSERT_EQ_INT(i8,  "%d")
 DEF_ASSERT_EQ_INT(i16, "%d")
 DEF_ASSERT_EQ_INT(i32, "%d")
-DEF_ASSERT_EQ_INT(i64, "%lld")
+DEF_ASSERT_EQ_INT(i64, "%zd")
 
 DEF_ASSERT_EQ_INT(u8,  "%u")
 DEF_ASSERT_EQ_INT(u16, "%u")
 DEF_ASSERT_EQ_INT(u32, "%u")
-DEF_ASSERT_EQ_INT(u64, "%llu")
+DEF_ASSERT_EQ_INT(u64, "%zu")
 
 internal_fn void assert_eq_f32(const char* fn, const char* file, int line, const char* ea, const char* eb, f32 a, f32 b) {
     f32 diff = a - b;
