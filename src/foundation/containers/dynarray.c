@@ -79,6 +79,7 @@ DynArray dynarray_create(
 		POD_LIFETIME
 	);
 }
+// NOTE: `elem_lifetime` has no requirement
 DynArray dynarray_create_complex(
 	const Allocator* allocator,
 	usize capacity,
@@ -178,8 +179,7 @@ void dynarray_move(
 ) {
 	dynarray_destroy(dest);
 	*dest = *src;
-	src->buffer = nullptr;
-    src->size = 0;
+	dynarray_reset_state(src);
 }
 
 
@@ -258,9 +258,6 @@ bool dynarray_resize(DynArray* dynarray, usize size) {
 	const ElementLifetime* lifetime = dynarray->descriptor.elem_lifetime;
 
 	assert(!lifetime || lifetime->policy);
-	if(lifetime) {
-		assert(lifetime->policy->ctor && lifetime->policy->dtor);
-	}
 
 	if(size == dynarray->size) {
 		return true;
@@ -274,7 +271,7 @@ bool dynarray_resize(DynArray* dynarray, usize size) {
 
 	// Shrink
 	if(size < old_size) {
-		if(!lifetime) {
+		if(!lifetime || !lifetime->policy->dtor) {
 			return true;
 		}
 		for(usize i = size; i < old_size; i++) {
@@ -288,7 +285,7 @@ bool dynarray_resize(DynArray* dynarray, usize size) {
 	}
 
 	// Grow
-	if(!dynarray->descriptor.elem_lifetime) {
+	if(!lifetime || !lifetime->policy->ctor) {
 		return true;
 	}
 	for(usize i = old_size; i < size; i++) {
@@ -445,13 +442,10 @@ void dynarray_pop(DynArray* dynarray) {
 	const ElementLifetime* lifetime = dynarray->descriptor.elem_lifetime;
 
 	assert(!lifetime || lifetime->policy);
-	if(lifetime) {
-		assert(lifetime->policy->dtor);
-	}
 
 	if(dynarray->size == 0) { return; }
 
-	if(lifetime) {
+	if(lifetime && lifetime->policy->dtor) {
 		lifetime->policy->dtor(
 			lifetime->ctx,
 			(u8*)dynarray->buffer + (dynarray->size - 1) * dynarray->descriptor.elem_size
@@ -472,9 +466,6 @@ bool dynarray_insert(
 	assert(index <= dynarray->size);
 
 	assert(!lifetime || lifetime->policy);
-	if(lifetime) {
-		assert(lifetime->policy->dtor);
-	}
 
 	if(!dynarray_ensure_capacity(dynarray, dynarray->size + 1)) {
 		return false;
@@ -522,10 +513,12 @@ bool dynarray_insert(
 			(void*)elem
 		);
 	} else {
-		lifetime->policy->dtor(
-			lifetime->ctx,
-			elem_addr
-		);
+		if(lifetime->policy->dtor) {
+			lifetime->policy->dtor(
+				lifetime->ctx,
+				elem_addr
+			);
+		}
 		lifetime->policy->copy(
 			lifetime->ctx,
 			elem_addr,
@@ -544,9 +537,6 @@ bool dynarray_remove(DynArray* dynarray, usize index) {
 	assert(index < dynarray->size);
 
 	assert(!lifetime || lifetime->policy);
-	if(lifetime) {
-		assert(lifetime->policy->dtor);
-	}
 
 	void* elem_addr = (u8*)dynarray->buffer + index * dynarray->descriptor.elem_size;
 
@@ -564,10 +554,12 @@ bool dynarray_remove(DynArray* dynarray, usize index) {
 		return false;
 	}
 
-	lifetime->policy->dtor(
-		lifetime->ctx,
-		(u8*)dynarray->buffer + index * dynarray->descriptor.elem_size
-	);
+	if(lifetime->policy->dtor) {
+		lifetime->policy->dtor(
+			lifetime->ctx,
+			(u8*)dynarray->buffer + index * dynarray->descriptor.elem_size
+		);
+	}
 
 	for(usize i = index + 1; i < dynarray->size; i++) {
 		void* src = (u8*)dynarray->buffer + i * dynarray->descriptor.elem_size;
@@ -586,7 +578,7 @@ bool dynarray_remove(DynArray* dynarray, usize index) {
 			src
 		);
 	}
-	if(!lifetime->policy->move) {
+	if(!lifetime->policy->move && lifetime->policy->dtor) {
 		lifetime->policy->dtor(
 			lifetime->ctx,
 			(u8*)dynarray->buffer + (dynarray->size - 1) * dynarray->descriptor.elem_size
@@ -602,11 +594,8 @@ void dynarray_clear(DynArray* dynarray) {
 	const ElementLifetime* lifetime = dynarray->descriptor.elem_lifetime;
 
 	assert(!lifetime || lifetime->policy);
-	if(lifetime) {
-		assert(lifetime->policy->dtor);
-	}
 
-	if(lifetime) {
+	if(lifetime && lifetime->policy->dtor) {
 		for(usize i = 0; i < dynarray->size; i++) {
 			lifetime->policy->dtor(
 				lifetime->ctx,
