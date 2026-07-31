@@ -66,6 +66,7 @@ TEST(test_pod_create) {
 		sizeof(TestPOD),
 		alignof(usize),
 		alignof(TestPOD),
+		HASHMAP_HASH_STRATEGRY_RECOMPUTE,
 		&key_lifetime
 	);
 
@@ -83,7 +84,7 @@ TEST(test_pod_create) {
 }
 
 TEST(test_pod_create_macro) {
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
     ASSERT_TRUE(hashmap.buffer != nullptr);
     ASSERT_EQ(hashmap.elem_count, 0);
@@ -106,6 +107,7 @@ TEST(test_pod_destroy) {
 		sizeof(TestPOD),
 		alignof(usize),
 		alignof(TestPOD),
+		HASHMAP_HASH_STRATEGRY_RECOMPUTE,
 		&key_lifetime
 	);
 
@@ -129,9 +131,7 @@ TEST(test_pod_destroy) {
 // ============================================================
 
 TEST(test_pod_grow) {
-	TEST_SKIP();
-
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
     ASSERT_EQ(hashmap.descriptor.capacity, 4);
 
@@ -146,7 +146,7 @@ TEST(test_pod_grow) {
 // ============================================================
 
 TEST(test_pod_copy) {
-    HashMap src = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap src = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 3, kc = 6;
 	TestPOD
@@ -185,7 +185,7 @@ TEST(test_pod_copy) {
 }
 
 TEST(test_pod_copy_empty) {
-	HashMap src = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+	HashMap src = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
     HashMap dst = {0};
 
     ASSERT_TRUE(hashmap_copy(&dst, &src));
@@ -213,7 +213,7 @@ TEST(test_pod_copy_empty) {
 // ============================================================
 
 TEST(test_pod_has) {
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 3, kc = 6;
 	TestPOD
@@ -229,7 +229,7 @@ TEST(test_pod_has) {
 }
 
 TEST(test_pod_at) {
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 3;
 	TestPOD
@@ -252,7 +252,7 @@ TEST(test_pod_at) {
 // ============================================================
 
 TEST(test_pod_insert) {
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 3, kc = 18;
 	TestPOD
@@ -274,7 +274,7 @@ TEST(test_pod_insert) {
 }
 
 TEST(test_pod_insert_collision) {
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 5, kc = 9;
 	TestPOD
@@ -296,10 +296,7 @@ TEST(test_pod_insert_collision) {
 }
 
 TEST(test_pod_insert_grow) {
-	TEST_SKIP();
-	assert(false);
-
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 2, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 2, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 3, kc = 18;
 	TestPOD
@@ -321,7 +318,7 @@ TEST(test_pod_insert_grow) {
 }
 
 TEST(test_pod_remove) {
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 3, kc = 18;
 	TestPOD
@@ -346,7 +343,7 @@ TEST(test_pod_remove) {
 }
 
 TEST(test_pod_clear) {
-    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, &key_lifetime);
+    HashMap hashmap = HASHMAP_CREATE(usize, TestPOD, &arena, 4, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime);
 
 	usize ka = 1, kb = 3, kc = 18;
 	TestPOD

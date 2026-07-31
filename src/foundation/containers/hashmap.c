@@ -9,32 +9,37 @@
 
 // --= Local Header =--
 
-internal const usize INVALID_INDEX = (usize)(-1);
+internal const hash_t INVALID_INDEX = (hash_t)(-1);
 
-typedef enum {
+typedef enum : u8 {
     HASHMAP_SLOT_EMPTY     = 0,
     HASHMAP_SLOT_OCCUPIED  = 1,
     HASHMAP_SLOT_TOMBSTONE = 2,
 } HashMapSlotState;
 
-internal_fn usize hashmap_hash(const HashMap* hashmap, const void* key) {
+internal_fn hash_t hashmap_freestanding_hash(const HashMap* hashmap, const void* key, usize capacity) {
+	return hashmap->descriptor.key_lifetime->policy->hash(
+		hashmap->descriptor.key_lifetime->ctx, key
+	) % capacity;
+}
+internal_fn hash_t hashmap_hash(const HashMap* hashmap, const void* key) {
 	return hashmap->descriptor.key_lifetime->policy->hash(
 		hashmap->descriptor.key_lifetime->ctx, key
 	) % hashmap->descriptor.capacity;
 }
 
-internal_fn i32 hashmap_get_slot_state(const HashMap* hashmap, usize index) {
-	return *(i32*)((HashMapSlotState*)hashmap->meta_buffer + index);
+internal_fn HashMapSlotState hashmap_get_slot_state(const HashMap* hashmap, hash_t index) {
+	return *((HashMapSlotState*)hashmap->meta_buffer + index);
 }
-internal_fn void hashmap_set_slot_state(const HashMap* hashmap, usize index, HashMapSlotState state) {
-	*(i32*)((HashMapSlotState*)hashmap->meta_buffer + index) = state;
+internal_fn void hashmap_set_slot_state(const HashMap* hashmap, hash_t index, HashMapSlotState state) {
+	*((HashMapSlotState*)hashmap->meta_buffer + index) = state;
 }
-internal_fn void* hashmap_get_key(const HashMap* hashmap, usize index) {
+internal_fn void* hashmap_get_key(const HashMap* hashmap, hash_t index) {
 	return (
 		(u8*)hashmap->keys_buffer + index * hashmap->descriptor.key_size
 	);
 }
-internal_fn void* hashmap_get_elem(const HashMap* hashmap, usize index) {
+internal_fn void* hashmap_get_elem(const HashMap* hashmap, hash_t index) {
 	return (
 		(u8*)hashmap->buffer + index * hashmap->descriptor.elem_size
 	);
@@ -51,11 +56,28 @@ internal void hashmap_copy_buffers_into(
 	usize capacity
 );
 
-internal void hashmap_insert_at_slot(HashMap*, usize index, const void* key, const void* elem);
-internal void hashmap_remove_at_slot(HashMap*, usize index);
+internal void hashmap_rehash(
+	void* dest_buffer,
+	void* dest_keys_buffer,
+	void* dest_meta_buffer,
+	usize new_capacity,
+	const HashMap* src_hashmap
+);
+
+
+internal void hashmap_insert_at_location(
+	const HashMap* hashmap,
+	void* dest_elem,
+	const void* src_elem,
+	void* dest_key,
+	const void* src_key
+);
+internal void hashmap_insert_at_slot(HashMap*, hash_t index, const void* key, const void* elem);
+internal void hashmap_remove_at_slot(HashMap*, hash_t index);
 
 internal void hashmap_reset_state(HashMap*);
 internal void hashmap_reset_destructive(HashMap*);
+
 
 // --= Element Lifetime =--
 
@@ -69,6 +91,7 @@ internal void hashmap_policy_ctor(void* ctx, void* elem) {
 		descriptor->elem_size,
 		descriptor->key_alignment,
 		descriptor->elem_alignment,
+		descriptor->hash_strategy,
 		descriptor->key_lifetime,
 		descriptor->elem_lifetime
 	);
@@ -87,7 +110,7 @@ internal void hashmap_policy_move(void* ctx, void* dest, void* src) {
 internal bool hashmap_policy_equals(void* ctx, const void* elem, const void* other) {
 	TODO_IMPL();
 }
-internal usize hashmap_policy_hash(void* ctx, const void* object) {
+internal hash_t hashmap_policy_hash(void* ctx, const void* object) {
 	TODO_IMPL();
 }
 
@@ -118,6 +141,7 @@ HashMap hashmap_create(
 	usize elem_size,
 	usize key_alignment,
 	usize elem_alignment,
+	HashMapHashStrategy hash_strategy,
 	const ElementLifetime* key_lifetime
 ) {
 	return hashmap_create_complex(
@@ -127,6 +151,7 @@ HashMap hashmap_create(
 		elem_size,
 		key_alignment,
 		elem_alignment,
+		hash_strategy,
 		key_lifetime,
 		POD_LIFETIME
 	);
@@ -138,6 +163,7 @@ HashMap hashmap_create_complex(
 	usize elem_size,
 	usize key_alignment,
 	usize elem_alignment,
+	HashMapHashStrategy hash_strategy,
 	const ElementLifetime* key_lifetime,
 	const ElementLifetime* elem_lifetime
 ) {
@@ -188,6 +214,7 @@ HashMap hashmap_create_complex(
 			.elem_size = elem_size,
 			.key_alignment = key_alignment,
 			.elem_alignment = elem_alignment,
+			.hash_strategy = hash_strategy,
 			.allocator = allocator,
 			.key_lifetime = key_lifetime,
 			.elem_lifetime = elem_lifetime,
@@ -212,11 +239,11 @@ void hashmap_destroy(HashMap* hashmap) {
 internal void hashmap_copy_buffers_into(
 	const HashMap* hashmap,
 	void* dest_buffer,
-	void* dest_meta_buffer,
 	void* dest_keys_buffer,
+	void* dest_meta_buffer,
 	const void* src_buffer,
-	const void* src_meta_buffer,
 	const void* src_keys_buffer,
+	const void* src_meta_buffer,
 	usize capacity
 ) {
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
@@ -247,18 +274,18 @@ internal void hashmap_copy_buffers_into(
 			src_buffer,
 			hashmap->descriptor.elem_size * capacity
 		);
-	} else if(key_lifetime->policy->move) {
+	} else if(elem_lifetime->policy->move) {
 		for(usize i = 0; i < capacity; i++) {
-			key_lifetime->policy->move(
-				key_lifetime->ctx,
+			elem_lifetime->policy->move(
+				elem_lifetime->ctx,
 				(u8*)dest_buffer + i * hashmap->descriptor.elem_size,
 				(u8*)src_buffer + i * hashmap->descriptor.elem_size
 			);
 		}
 	} else {
 		for(usize i = 0; i < capacity; i++) {
-			key_lifetime->policy->copy(
-				key_lifetime->ctx,
+			elem_lifetime->policy->copy(
+				elem_lifetime->ctx,
 				(u8*)dest_buffer + i * hashmap->descriptor.elem_size,
 				(u8*)src_buffer + i * hashmap->descriptor.elem_size
 			);
@@ -270,6 +297,85 @@ internal void hashmap_copy_buffers_into(
 		src_meta_buffer,
 		sizeof(HashMapSlotState) * capacity
 	);
+}
+
+internal void hashmap_rehash(
+	void* dest_buffer,
+	void* dest_keys_buffer,
+	void* dest_meta_buffer,
+	usize new_capacity,
+	const HashMap* src_hashmap
+) {
+	if(src_hashmap->descriptor.hash_strategy != HASHMAP_HASH_STRATEGRY_RECOMPUTE) {
+		return;
+	}
+
+	const ElementLifetime* key_lifetime = src_hashmap->descriptor.key_lifetime;
+	const ElementLifetime* elem_lifetime = src_hashmap->descriptor.elem_lifetime;
+
+	(void)memset(dest_meta_buffer, HASHMAP_SLOT_EMPTY, new_capacity);
+
+	// Copy every element
+	for(usize i = 0; i < src_hashmap->descriptor.capacity; i++) {
+
+		const void* src_key = (u8*)src_hashmap->keys_buffer + i * src_hashmap->descriptor.key_size;
+		const void* src_elem = (u8*)src_hashmap->buffer + i * src_hashmap->descriptor.elem_size;
+		HashMapSlotState src_state = *((HashMapSlotState*)src_hashmap->meta_buffer + i);
+		if(src_state != HASHMAP_SLOT_OCCUPIED) {
+			continue;
+		}
+
+		hash_t index = hashmap_freestanding_hash(src_hashmap, src_key, new_capacity);
+		hash_t tombstone = INVALID_INDEX;
+
+		for(usize probes = 0; probes < new_capacity; probes++) {
+			void* key = (u8*)dest_keys_buffer + index * src_hashmap->descriptor.key_size;
+			void* elem = (u8*)dest_buffer + index * src_hashmap->descriptor.elem_size;
+			HashMapSlotState* state = (HashMapSlotState*)dest_meta_buffer + index;
+
+			switch(*state) {
+				case HASHMAP_SLOT_EMPTY:
+					if(tombstone != INVALID_INDEX) {
+						index = tombstone;
+					}
+					hashmap_insert_at_location(
+						src_hashmap,
+						elem,
+						src_elem,
+						key,
+						src_key
+					);
+					*state = HASHMAP_SLOT_OCCUPIED;
+					break;
+
+				case HASHMAP_SLOT_OCCUPIED:
+					index = (index + 1) % new_capacity;
+					break;
+
+				case HASHMAP_SLOT_TOMBSTONE:
+					UNREACHABLE("Invalid hashmap slot state HASHMAP_SLOT_TOMBSTONE in `rehash`");
+
+				default:
+					UNREACHABLE("Invalid hashmap slot state %u at index %zu", *state, index);
+			}
+		}
+	}
+
+	// Construct empty slots
+	for(usize i = 0; i < new_capacity; i++) {
+		HashMapSlotState* state = (HashMapSlotState*)dest_meta_buffer + i;
+		if(*state == HASHMAP_SLOT_OCCUPIED) {
+			continue;
+		}
+		void* elem = (u8*)dest_buffer + i * src_hashmap->descriptor.elem_size;
+		if(elem_lifetime) {
+			elem_lifetime->policy->ctor(
+				elem_lifetime->ctx,
+				elem
+			);
+		}
+		*state = HASHMAP_SLOT_EMPTY;
+	}
 }
 
 // NOTE: Copies every element from src to dest
@@ -299,13 +405,13 @@ bool hashmap_copy_walloc(
 	void* buffer = allocator_alloc(
 		allocator,
 		src->descriptor.elem_size * src->descriptor.capacity,
-		src->descriptor.key_alignment
+		src->descriptor.elem_alignment
 	);
 	if(!buffer) { goto empty_return; }
 	void* keys_buffer = allocator_alloc(
 		allocator,
 		src->descriptor.key_size * src->descriptor.capacity,
-		src->descriptor.elem_alignment
+		src->descriptor.key_alignment
 	);
 	if(!keys_buffer) { goto free_buffer; }
 	void* meta_buffer = allocator_alloc(
@@ -318,11 +424,11 @@ bool hashmap_copy_walloc(
 	hashmap_copy_buffers_into(
 		(HashMap*)src, // TODO: Probably somethings about this (figure out const pointers)
 		buffer,
-		meta_buffer,
 		keys_buffer,
+		meta_buffer,
 		src->buffer,
-		src->meta_buffer,
 		src->keys_buffer,
+		src->meta_buffer,
 		src->descriptor.capacity
 	);
 
@@ -383,21 +489,6 @@ bool hashmap_grow(HashMap* hashmap, usize new_capacity) {
 	);
 	if(!meta_buffer) { goto free_keys_buffer; }
 
-	hashmap_copy_buffers_into(
-		hashmap,
-		buffer,
-		keys_buffer,
-		meta_buffer,
-		hashmap->buffer,
-		hashmap->keys_buffer,
-		hashmap->meta_buffer,
-		hashmap->descriptor.capacity
-	);
-
-	TODO("Move necessary items (hash may change because of `%% capacity`)");
-
-	hashmap->meta_buffer = meta_buffer;
-
 	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
 	for(usize i = hashmap->descriptor.capacity; i < new_capacity; i++) {
 		if(elem_lifetime) {
@@ -409,8 +500,17 @@ bool hashmap_grow(HashMap* hashmap, usize new_capacity) {
 		hashmap_set_slot_state(hashmap, i, HASHMAP_SLOT_EMPTY);
 	}
 
+	hashmap_rehash(
+		buffer,
+		keys_buffer,
+		meta_buffer,
+		new_capacity,
+		hashmap
+	);
+
 	hashmap->buffer = buffer;
 	hashmap->keys_buffer = keys_buffer;
+	hashmap->meta_buffer = meta_buffer;
 	hashmap->descriptor.capacity = new_capacity;
 
 	return true;
@@ -430,7 +530,7 @@ void* hashmap_at(const HashMap* hashmap, const void* key) {
 
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
 
-	usize index = hashmap_hash(hashmap, key);
+	hash_t index = hashmap_hash(hashmap, key);
 
 	for(usize probes = 0; probes < hashmap->descriptor.capacity; probes++) {
 		const HashMapSlotState state = hashmap_get_slot_state(hashmap, index);
@@ -446,6 +546,7 @@ void* hashmap_at(const HashMap* hashmap, const void* key) {
 				)) {
 					return (void*)((u8*)hashmap->buffer + index * hashmap->descriptor.elem_size);
                 }
+				[[fallthrough]];
 
             case HASHMAP_SLOT_TOMBSTONE:
                 index = (index + 1) % hashmap->descriptor.capacity;
@@ -465,12 +566,12 @@ const void* hashmap_at_const(const HashMap* hashmap, const void* key) {
 bool hashmap_has(const HashMap *hashmap, const void *key) {
 
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
-	const ElementLifetime* elem_lifetime = hashmap->descriptor.key_lifetime;
+	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
 
 	assert(key_lifetime && key_lifetime->policy && key_lifetime->policy->hash);
 	assert(!elem_lifetime || elem_lifetime->policy);
 
-	usize index = hashmap_hash(hashmap, key);
+	hash_t index = hashmap_hash(hashmap, key);
 
 	for(usize probes = 0; probes < hashmap->descriptor.capacity; probes++) {
 		const HashMapSlotState state = hashmap_get_slot_state(hashmap, index);
@@ -486,6 +587,7 @@ bool hashmap_has(const HashMap *hashmap, const void *key) {
 				)) {
 					return true;
                 }
+				[[fallthrough]];
 
             case HASHMAP_SLOT_TOMBSTONE:
                 index = (index + 1) % hashmap->descriptor.capacity;
@@ -502,58 +604,77 @@ bool hashmap_has(const HashMap *hashmap, const void *key) {
 
 // --= Modifiers =--
 
-internal void hashmap_insert_at_slot(HashMap* hashmap, usize index, const void* key, const void* elem) {
+internal void hashmap_insert_at_location(
+	const HashMap* hashmap,
+	void* dest_elem,
+	const void* src_elem,
+	void* dest_key,
+	const void* src_key
+) {
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
 	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
-
-	assert(key_lifetime);
-	assert(!elem_lifetime || elem_lifetime->policy->move || elem_lifetime->policy->copy);
 
 	if(key_lifetime->policy->copy) {
 		key_lifetime->policy->copy(
 			key_lifetime->ctx,
-			hashmap_get_key(hashmap, index),
-			key
+			dest_key,
+			src_key
 		);
 	} else {
 		(void)memmove(
-			hashmap_get_key(hashmap, index),
-			key,
+			dest_key,
+			src_key,
 			hashmap->descriptor.key_size
 		);
 	}
 
 	if(!elem_lifetime) {
 		(void)memmove(
-			hashmap_get_elem(hashmap, index),
-			elem,
+			dest_elem,
+			src_elem,
 			hashmap->descriptor.elem_size
 		);
 	} else if(elem_lifetime->policy->move) {
 		elem_lifetime->policy->move(
 			elem_lifetime->ctx,
-			hashmap_get_elem(hashmap, index),
-			(void*)elem
+			dest_elem,
+			(void*)src_elem
 		);
 	} else {
 		elem_lifetime->policy->copy(
 			elem_lifetime->ctx,
-			hashmap_get_elem(hashmap, index),
-			elem
+			dest_elem,
+			src_elem
 		);
 	}
+}
+
+internal void hashmap_insert_at_slot(HashMap* hashmap, hash_t index, const void* key, const void* elem) {
+	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
+	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
+
+	assert(key_lifetime);
+	assert(!elem_lifetime || elem_lifetime->policy->move || elem_lifetime->policy->copy);
+
+	hashmap_insert_at_location(
+		hashmap,
+		hashmap_get_elem(hashmap, index),
+		elem,
+		hashmap_get_key(hashmap, index),
+		key
+	);
 
 	hashmap_set_slot_state(hashmap, index, HASHMAP_SLOT_OCCUPIED);
 
 	hashmap->elem_count++;
 }
 
-internal void hashmap_remove_at_slot(HashMap* hashmap, usize index) {
+internal void hashmap_remove_at_slot(HashMap* hashmap, hash_t index) {
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
 	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
 
 	assert(key_lifetime);
-	assert(!elem_lifetime || elem_lifetime->policy->move || elem_lifetime->policy->copy);
+	assert(!elem_lifetime || elem_lifetime->policy);
 
 	if(!key_lifetime->policy->dtor) {
 		(void)memset(
@@ -568,7 +689,7 @@ internal void hashmap_remove_at_slot(HashMap* hashmap, usize index) {
 		);
 	}
 
-	if(!elem_lifetime) {
+	if(!elem_lifetime || !elem_lifetime->policy->dtor) {
 		(void)memset(
 			hashmap_get_elem(hashmap, index),
 			0,
@@ -601,9 +722,9 @@ bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
 		}
 	}
 
-	usize index = hashmap_hash(hashmap, key);
+	hash_t index = hashmap_hash(hashmap, key);
 
-	usize tombstone = INVALID_INDEX;
+	hash_t tombstone = INVALID_INDEX;
 
 	for(usize probes = 0; probes < hashmap->descriptor.capacity; probes++) {
 		const HashMapSlotState state = hashmap_get_slot_state(hashmap, index);
@@ -613,6 +734,7 @@ bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
 					index = tombstone;
 				}
                 hashmap_insert_at_slot(hashmap, index, key, elem);
+
                 return true;
 
             case HASHMAP_SLOT_TOMBSTONE:
@@ -627,7 +749,9 @@ bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
 					key,
 					hashmap_get_key(hashmap, index)
 				)) {
+					hashmap_remove_at_slot(hashmap, index);
                     hashmap_insert_at_slot(hashmap, index, key, elem);
+
                     return true;
                 }
 
@@ -639,7 +763,7 @@ bool hashmap_insert(HashMap* hashmap, const void* key, const void* elem) {
         }
 	}
 
-	UNREACHABLE("Hashmap full at %p", hashmap);
+	UNREACHABLE("Hashmap full at %p, %zu", hashmap, index);
 }
 
 bool hashmap_remove(HashMap* hashmap, const void* key) {
@@ -654,7 +778,7 @@ bool hashmap_remove(HashMap* hashmap, const void* key) {
 		return false;
 	}
 
-	usize index = hashmap_hash(hashmap, key);
+	hash_t index = hashmap_hash(hashmap, key);
 
 	for(usize probes = 0; probes < hashmap->descriptor.capacity; probes++) {
 		const HashMapSlotState state = hashmap_get_slot_state(hashmap, index);
@@ -671,6 +795,7 @@ bool hashmap_remove(HashMap* hashmap, const void* key) {
                     hashmap_remove_at_slot(hashmap, index);
                     return true;
                 }
+				[[fallthrough]];
 
             case HASHMAP_SLOT_TOMBSTONE:
                 index = (index + 1) % hashmap->descriptor.capacity;
@@ -718,6 +843,7 @@ internal void hashmap_reset_state(HashMap* hashmap) {
     hashmap->descriptor.key_alignment = 0;
     hashmap->descriptor.elem_alignment = 0;
     hashmap->descriptor.allocator = nullptr;
+	hashmap->descriptor.hash_strategy = HASHMAP_HASH_STRATEGRY_RECOMPUTE;
     hashmap->descriptor.key_lifetime = nullptr;
     hashmap->descriptor.elem_lifetime = nullptr;
 }

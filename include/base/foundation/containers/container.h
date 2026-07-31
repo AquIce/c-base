@@ -5,13 +5,15 @@
 
 #define POD_LIFETIME nullptr
 
-typedef void  (*CtorFunc)(void* ctx, void* elem);
-typedef void  (*DtorFunc)(void* ctx, void* elem);
-typedef void  (*CopyFunc)(void* ctx, void* dest, const void* src);
-typedef void  (*MoveFunc)(void* ctx, void* dest, void* src);
-typedef bool  (*EqualsFunc)(void* ctx, const void* elem, const void* other);
-typedef i32   (*CompareFunc)(void* ctx, const void* elem, const void* other);
-typedef usize (*HashFunc)(void* ctx, const void* object);
+typedef u64 hash_t;
+
+typedef void   (*CtorFunc)(void* ctx, void* elem);
+typedef void   (*DtorFunc)(void* ctx, void* elem);
+typedef void   (*CopyFunc)(void* ctx, void* dest, const void* src);
+typedef void   (*MoveFunc)(void* ctx, void* dest, void* src);
+typedef bool   (*EqualsFunc)(void* ctx, const void* elem, const void* other);
+typedef i32    (*CompareFunc)(void* ctx, const void* elem, const void* other);
+typedef hash_t (*HashFunc)(void* ctx, const void* object);
 
 typedef struct {
 	// NOTE: If ctor is not provided, the element described by this policy is considered TRIVIALLY CONSTRUCTIBLE
