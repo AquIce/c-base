@@ -4,7 +4,7 @@
 #include <base/foundation/memory/allocator.h>
 #include <base/foundation/containers/container.h>
 
-#define HASHMAP_CREATE(K, V, allocator, capacity, key_lifetime) \
+#define HASHMAP_CREATE(K, V, allocator, capacity, hash_strategy, key_lifetime) \
 	hashmap_create( \
 		(allocator), \
 		(capacity), \
@@ -12,10 +12,11 @@
 		sizeof(V), \
 		alignof(K), \
 		alignof(V), \
+		(hash_strategy), \
 		(key_lifetime) \
 	)
 
-#define HASHMAP_CREATE_COMPLEX(K, V, allocator, capacity, key_lifetime, elem_lifetime) \
+#define HASHMAP_CREATE_COMPLEX(K, V, allocator, capacity, hash_strategy, key_lifetime, elem_lifetime) \
 	hashmap_create_complex( \
 		(allocator), \
 		(capacity), \
@@ -23,7 +24,8 @@
 		sizeof(V), \
 		alignof(K), \
 		alignof(V), \
-		(key_lifetime) \
+		(hash_strategy), \
+		(key_lifetime), \
 		(elem_lifetime) \
 	)
 
@@ -42,6 +44,10 @@
 
 #define HASHMAP_GROW_FACTOR 2
 
+typedef enum : u8 {
+	HASHMAP_HASH_STRATEGRY_RECOMPUTE = 0,
+} HashMapHashStrategy;
+
 typedef struct {
 	usize capacity;
 
@@ -58,6 +64,8 @@ typedef struct {
 	// NOTE :Element lifetime is optional.
 	// If it has a `move`, it will be moved, if if it has a `copy`, it will be copied, otherwise it is copied/moved as a POD.
 	const ElementLifetime* elem_lifetime;
+
+	HashMapHashStrategy hash_strategy;
 } HashMapDescriptor;
 
 typedef struct {
@@ -84,6 +92,7 @@ HashMap hashmap_create(
 	usize elem_size,
 	usize key_alignment,
 	usize elem_alignment,
+	HashMapHashStrategy hash_strategy,
 	const ElementLifetime* key_lifetime
 );
 HashMap hashmap_create_complex(
@@ -93,6 +102,7 @@ HashMap hashmap_create_complex(
 	usize elem_size,
 	usize key_alignment,
 	usize elem_alignment,
+	HashMapHashStrategy hash_strategy,
 	const ElementLifetime* key_lifetime,
 	const ElementLifetime* elem_lifetime
 );
