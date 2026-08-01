@@ -614,7 +614,13 @@ internal void hashmap_insert_at_location(
 	const ElementLifetime* key_lifetime = hashmap->descriptor.key_lifetime;
 	const ElementLifetime* elem_lifetime = hashmap->descriptor.elem_lifetime;
 
-	if(key_lifetime->policy->copy) {
+	if(key_lifetime->policy->move) {
+		key_lifetime->policy->move(
+			key_lifetime->ctx,
+			dest_key,
+			(void*)src_key
+		);
+	} else if(key_lifetime->policy->copy) {
 		key_lifetime->policy->copy(
 			key_lifetime->ctx,
 			dest_key,
