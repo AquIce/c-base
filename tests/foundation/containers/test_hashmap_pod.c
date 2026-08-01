@@ -31,7 +31,7 @@ internal bool test_equals(void* ctx, const void* elem, const void* other) {
 	return *(usize*)elem == *(usize*)other;
 }
 
-internal usize test_hash(void* ctx, const void* object) {
+internal hash_t test_hash(void* ctx, const void* object) {
 	return *(usize*)object;
 }
 
