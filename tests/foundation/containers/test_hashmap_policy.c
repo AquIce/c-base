@@ -52,6 +52,7 @@ internal void test_key_dtor(void* ctx, void* elem) {
 
     tracker->dtor_calls++;
 	free(object->str);
+	object->str = nullptr;
 	object->len = 0;
 }
 
@@ -64,11 +65,10 @@ internal void test_key_copy(void* ctx, void* dest, const void* src) {
 	dest_object->len = src_object->len;
 	dest_object->str = malloc(dest_object->len);
 	assert(dest_object->str);
-	memcpy(dest_object->str, src_object, dest_object->len);
+	memcpy(dest_object->str, src_object->str, dest_object->len);
 }
 
 internal void test_key_move(void* ctx, void* dest, void* src) {
-	LOG("Moving rn");
     TestTracker* tracker = &((TestKeyCtx*)ctx)->tracker;
     tracker->move_calls++;
     *(TestKey*)dest = *(TestKey*)src;
@@ -262,13 +262,443 @@ TEST(test_policy_destroy) {
     ASSERT_EQ(elem_tracker.dtor_calls, 3);
 }
 
+TEST(test_policy_copy) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    ElementLifetime key_lifetime;
+    ElementLifetime elem_lifetime;
+
+	HashMap hashmap = make_test_hashmap(16, &key_ctx, &elem_tracker, &key_lifetime, &elem_lifetime);
+
+	TestKey k1;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+
+	key_ctx.tracker.copy_calls = 0;
+    elem_tracker.copy_calls = 0;
+
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k1, e1));
+
+    ASSERT_EQ(key_ctx.tracker.copy_calls, 1);
+    ASSERT_EQ(elem_tracker.copy_calls, 1);
+	ASSERT_EQ(HASHMAP_AT(&hashmap, TestElem, k1)->value, 1);
+
+	// INFO: Required because copy does not destroy `src`
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_copy_rejected) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    const ElementPolicy key_policy = {
+        .ctor = &test_key_ctor,
+        .dtor = &test_key_dtor,
+        .copy = nullptr,
+        .move = nullptr,
+		.equals = &test_key_equals,
+		.hash = &test_key_hash,
+    };
+    ElementLifetime key_lifetime = {
+        .policy = &key_policy,
+        .ctx = &key_ctx,
+    };
+    const ElementPolicy elem_policy = {
+        .ctor = &test_elem_ctor,
+        .dtor = &test_elem_dtor,
+        .copy = nullptr,
+        .move = nullptr,
+    };
+    ElementLifetime elem_lifetime = {
+        .policy = &elem_policy,
+        .ctx = &elem_tracker,
+    };
+
+    ASSERT_DEATH(
+		HASHMAP_CREATE_COMPLEX(
+			TestKey,
+			TestElem,
+			&arena, 16,
+			HASHMAP_HASH_STRATEGRY_RECOMPUTE,
+			&key_lifetime,
+			&elem_lifetime
+		)
+	);
+}
+
+TEST(test_policy_move) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    ElementLifetime key_lifetime;
+    ElementLifetime elem_lifetime;
+
+	HashMap hashmap = make_test_hashmap(16, &key_ctx, &elem_tracker, &key_lifetime, &elem_lifetime);
+
+	TestKey k1, k1_too;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1_too);
+	k1_too.len = 5; memcpy(k1_too.str, "Hello", k1_too.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+
+	key_ctx.tracker.move_calls = 0;
+    elem_tracker.move_calls = 0;
+
+	ASSERT_TRUE(HASHMAP_INSERT_MOVE(&hashmap, k1, e1));
+
+    ASSERT_EQ(key_ctx.tracker.move_calls, 1);
+    ASSERT_EQ(elem_tracker.move_calls, 1);
+	ASSERT_EQ(HASHMAP_AT(&hashmap, TestElem, k1_too)->value, 1);
+
+	// INFO: No `dtor` call on `k1` required because move destroys `src`
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1_too);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_has) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    ElementLifetime key_lifetime;
+    ElementLifetime elem_lifetime;
+
+	HashMap hashmap = make_test_hashmap(
+		16,
+		&key_ctx,
+		&elem_tracker,
+		&key_lifetime,
+		&elem_lifetime
+	);
+
+	TestKey k1, k2;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k2);
+	k2.len = 2; memcpy(k1.str, "Hi", k2.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k1, e1));
+
+	ASSERT_TRUE(hashmap_has(&hashmap, &k1));
+	ASSERT_FALSE(hashmap_has(&hashmap, &k2));
+
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1);
+	TEST_KEY_POLICY.dtor(&key_ctx, &k2);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_grow_move) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    const ElementPolicy key_policy = {
+        .ctor = &test_key_ctor,
+        .dtor = &test_key_dtor,
+        .copy = &test_key_copy,
+        .move = &test_key_move,
+		.equals = &test_key_equals,
+		.hash = &test_key_hash,
+    };
+    ElementLifetime key_lifetime = {
+        .policy = &key_policy,
+        .ctx = &key_ctx,
+    };
+    const ElementPolicy elem_policy = {
+        .ctor = &test_elem_ctor,
+        .dtor = &test_elem_dtor,
+        .copy = &test_elem_copy,
+        .move = &test_elem_move,
+    };
+    ElementLifetime elem_lifetime = {
+        .policy = &elem_policy,
+        .ctx = &elem_tracker,
+    };
+
+    HashMap hashmap = HASHMAP_CREATE_COMPLEX(TestKey, TestElem, &arena, 16, HASHMAP_HASH_STRATEGRY_RECOMPUTE, &key_lifetime, &elem_lifetime);
+
+	TestKey k1, k2, k3;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k2);
+	k2.len = 2; memcpy(k2.str, "Hi", k2.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k3);
+	k3.len = 3; memcpy(k3.str, "Bar", k3.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+	TestElem e2 = (TestElem){ .value = 2 };
+	TestElem e3 = (TestElem){ .value = 3 };
+
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k1, e1));
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k2, e2));
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k3, e3));
+
+	key_ctx.tracker.move_calls = 0;
+    elem_tracker.move_calls = 0;
+
+	ASSERT_TRUE(hashmap_grow(&hashmap, 32));
+
+    ASSERT_TRUE(key_ctx.tracker.move_calls > 0);
+    ASSERT_TRUE(elem_tracker.move_calls > 0);
+
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1);
+	TEST_KEY_POLICY.dtor(&key_ctx, &k2);
+	TEST_KEY_POLICY.dtor(&key_ctx, &k3);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_grow_copy_fallback) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    const ElementPolicy key_policy = {
+        .ctor = &test_key_ctor,
+        .dtor = &test_key_dtor,
+        .copy = &test_key_copy,
+        .move = nullptr,
+		.equals = &test_key_equals,
+		.hash = &test_key_hash,
+    };
+    ElementLifetime key_lifetime = {
+        .policy = &key_policy,
+        .ctx = &key_ctx,
+    };
+    const ElementPolicy elem_policy = {
+        .ctor = &test_elem_ctor,
+        .dtor = &test_elem_dtor,
+        .copy = &test_elem_copy,
+        .move = nullptr,
+    };
+    ElementLifetime elem_lifetime = {
+        .policy = &elem_policy,
+        .ctx = &elem_tracker,
+    };
+
+    HashMap hashmap = HASHMAP_CREATE_COMPLEX(
+		TestKey,
+		TestElem,
+		&arena,
+		16,
+		HASHMAP_HASH_STRATEGRY_RECOMPUTE,
+		&key_lifetime,
+		&elem_lifetime
+	);
+
+	TestKey k1, k2, k3;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k2);
+	k2.len = 2; memcpy(k2.str, "Hi", k2.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k3);
+	k3.len = 3; memcpy(k3.str, "Bar", k3.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+	TestElem e2 = (TestElem){ .value = 2 };
+	TestElem e3 = (TestElem){ .value = 3 };
+
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k1, e1));
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k2, e2));
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k3, e3));
+
+	key_ctx.tracker.copy_calls = 0;
+    elem_tracker.copy_calls = 0;
+
+	ASSERT_TRUE(hashmap_grow(&hashmap, 32));
+
+    ASSERT_TRUE(key_ctx.tracker.copy_calls > 0);
+    ASSERT_TRUE(elem_tracker.copy_calls > 0);
+
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1);
+	TEST_KEY_POLICY.dtor(&key_ctx, &k2);
+	TEST_KEY_POLICY.dtor(&key_ctx, &k3);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_insert) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    ElementLifetime key_lifetime;
+    ElementLifetime elem_lifetime;
+
+	HashMap hashmap = make_test_hashmap(
+		16,
+		&key_ctx,
+		&elem_tracker,
+		&key_lifetime,
+		&elem_lifetime
+	);
+
+	TestKey k1;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k1, e1));
+	ASSERT_TRUE(hashmap_has(&hashmap, &k1));
+
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_insert_move) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    ElementLifetime key_lifetime;
+    ElementLifetime elem_lifetime;
+
+	HashMap hashmap = make_test_hashmap(
+		16,
+		&key_ctx,
+		&elem_tracker,
+		&key_lifetime,
+		&elem_lifetime
+	);
+
+	TestKey k1, k1_too;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1_too);
+	k1_too.len = 5; memcpy(k1_too.str, "Hello", k1_too.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+
+	ASSERT_TRUE(HASHMAP_INSERT_MOVE(&hashmap, k1, e1));
+	ASSERT_TRUE(hashmap_has(&hashmap, &k1_too));
+
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1_too);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_remove) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    ElementLifetime key_lifetime;
+    ElementLifetime elem_lifetime;
+
+	HashMap hashmap = make_test_hashmap(
+		16,
+		&key_ctx,
+		&elem_tracker,
+		&key_lifetime,
+		&elem_lifetime
+	);
+
+	TestKey k1;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+
+	ASSERT_TRUE(HASHMAP_INSERT(&hashmap, k1, e1));
+	ASSERT_TRUE(hashmap_has(&hashmap, &k1));
+	ASSERT_TRUE(hashmap_remove(&hashmap, &k1));
+	LOG("FINN %p has len %zu", k1.str, k1.len);
+	ASSERT_FALSE(hashmap_has(&hashmap, &k1));
+
+	TEST_KEY_POLICY.dtor(&key_ctx, &k1);
+    hashmap_destroy(&hashmap);
+}
+
+TEST(test_policy_clear) {
+	TestKeyCtx key_ctx = (TestKeyCtx){
+		.len = 16,
+		.tracker = (TestTracker){0},
+	};
+    TestTracker elem_tracker = {0};
+
+    ElementLifetime key_lifetime;
+    ElementLifetime elem_lifetime;
+	
+    HashMap hashmap = make_test_hashmap(16, &key_ctx, &elem_tracker, &key_lifetime, &elem_lifetime);
+
+	TestKey k1, k2, k3;
+	TEST_KEY_POLICY.ctor(&key_ctx, &k1);
+	k1.len = 5; memcpy(k1.str, "Hello", k1.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k2);
+	k2.len = 2; memcpy(k2.str, "Hi", k2.len);
+	TEST_KEY_POLICY.ctor(&key_ctx, &k3);
+	k3.len = 3; memcpy(k3.str, "Bar", k3.len);
+
+	TestElem e1 = (TestElem){ .value = 1 };
+	TestElem e2 = (TestElem){ .value = 2 };
+	TestElem e3 = (TestElem){ .value = 3 };
+
+	ASSERT_TRUE(HASHMAP_INSERT_MOVE(&hashmap, k1, e1));
+	ASSERT_TRUE(HASHMAP_INSERT_MOVE(&hashmap, k2, e2));
+	ASSERT_TRUE(HASHMAP_INSERT_MOVE(&hashmap, k3, e3));
+
+	ASSERT_EQ(hashmap_size(&hashmap), 3);
+	ASSERT_FALSE(hashmap_empty(&hashmap));
+	hashmap_clear(&hashmap);
+	ASSERT_EQ(hashmap_size(&hashmap), 0);
+	ASSERT_TRUE(hashmap_empty(&hashmap));
+
+    hashmap_destroy(&hashmap);
+}
+
 TEST_ROOT(HASHMAP_POLICY, "HashMap Policy Tests",
     setup_arena,
     teardown_arena,
 
 	TEST_GROUP("Global",
 		TEST_NODE(test_policy_create),
-		TEST_NODE(test_policy_destroy),
+		TEST_NODE(test_policy_destroy)
+	),
+
+	TEST_GROUP("Base Members",
+		TEST_NODE(test_policy_copy),
+		TEST_NODE(test_policy_copy_rejected),
+		TEST_NODE(test_policy_move),
+		TEST_NODE(test_policy_has)
+	),
+
+	TEST_GROUP("Grow",
+		TEST_NODE(test_policy_grow_move),
+		TEST_NODE(test_policy_grow_copy_fallback)
+	),
+
+	TEST_GROUP("Modifiers",
+		TEST_NODE(test_policy_insert),
+		TEST_NODE(test_policy_insert_move),
+		TEST_NODE(test_policy_remove),
+		TEST_NODE(test_policy_clear)
 	)
 );
 
