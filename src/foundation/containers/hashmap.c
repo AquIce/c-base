@@ -205,11 +205,8 @@ HashMap hashmap_create_complex(
 		);
 		if(!meta_buffer) { goto free_keys_buffer; }
 
-		// TODO: Figure out whether I can use memset once
-		for(usize i = 0; i < capacity; i++) {
-			*((HashMapSlotState*)meta_buffer + i) = HASHMAP_SLOT_EMPTY;
-		}
-		// (void)memset(meta_buffer, HASHMAP_SLOT_EMPTY, capacity);
+		// NOTE: Works because `HashMapSlotState` is `u8`
+		(void)memset(meta_buffer, HASHMAP_SLOT_EMPTY, capacity);
 	}
 	return (HashMap){
 		.buffer = buffer,
@@ -446,7 +443,7 @@ bool hashmap_copy_walloc(
 	if(!meta_buffer) { goto free_keys_buffer; }
 
 	hashmap_relocate_buffers(
-		(HashMap*)src, // TODO: Probably somethings about this (figure out const pointers)
+		src,
 		buffer,
 		keys_buffer,
 		meta_buffer,
