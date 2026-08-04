@@ -42,6 +42,9 @@
         hashmap_insert((hashmap), ((const void*)&tmp_key), (const void*)&tmp_value); \
     })
 
+#define HASHMAP_INSERT_MOVE(hashmap, key, value) \
+	hashmap_insert_move((hashmap), &(key), &(value))
+
 #define HASHMAP_GROW_FACTOR 2
 
 typedef enum : u8 {
@@ -150,6 +153,7 @@ bool hashmap_has(const HashMap* hashmap, const void* key);
 // --= Modifiers =--
 
 bool hashmap_insert(HashMap*, const void* key, const void* elem);
+bool hashmap_insert_move(HashMap*, void* key, void* elem);
 
 bool hashmap_remove(HashMap*, const void* key);
 
