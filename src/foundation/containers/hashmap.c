@@ -486,7 +486,15 @@ void hashmap_move(
 
 bool hashmap_grow(HashMap* hashmap, usize new_capacity) {
 
+	if(new_capacity < hashmap->descriptor.capacity) {
+		return false;
+	}
+	if(new_capacity == hashmap->descriptor.capacity) {
+		return true;
+	}
+
 	if(new_capacity == INVALID_INDEX) {
+		LOG("Capacity: %zu, new capacity: %zu", hashmap->descriptor.capacity, hashmap->descriptor.capacity * HASHMAP_GROW_FACTOR);
 		new_capacity = hashmap->descriptor.capacity == 0
 			? 1
 			: hashmap->descriptor.capacity * HASHMAP_GROW_FACTOR;
@@ -625,7 +633,7 @@ internal bool hashmap_insert_any(HashMap* hashmap, void* key, void* elem, bool f
 	assert(key_lifetime->policy->hash && key_lifetime->policy->equals);
 	assert(!elem_lifetime || elem_lifetime->policy);
 
-	if(hashmap->elem_count + 1 >= hashmap->descriptor.capacity) {
+	if(hashmap->elem_count >= hashmap->descriptor.capacity) {
 		if(!hashmap_grow(hashmap, INVALID_INDEX)) {
 			return false;
 		}
